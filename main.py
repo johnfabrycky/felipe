@@ -36,11 +36,42 @@ intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+bot.remove_command('help')
+
 @bot.event
 async def on_ready():
     print(f"We are ready to go in, {bot.user.name}")
 
 movie_sessions = {}
+
+
+@bot.command(name="help")
+async def help_command(ctx):
+    embed = discord.Embed(
+        title="🤖 Movie Bot Help",
+        description="I help you track what movies are playing and where!",
+        color=discord.Color.green()
+    )
+
+    embed.add_field(
+        name="🎬 !watch",
+        value=(
+            "**Usage:** `!watch <duration> <location> <movie> [start_time]`\n"
+            "Records a movie session. If no start time is given, it starts now.\n"
+            "*Example:* `!watch 120 LivingRoom \"The Union\" 20:30`"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🍿 !where",
+        value="Shows all movies currently playing or starting soon.",
+        inline=False
+    )
+
+    embed.set_footer(text="Pro-tip: Use \"quotes\" if your movie name has spaces!")
+
+    await ctx.send(embed=embed)
 
 
 @bot.command(name="watch")
