@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 from flask import Flask
 from threading import Thread
+from datetime import datetime, timedelta
 
 # 1. Setup a tiny Flask server
 app = Flask('')
@@ -32,52 +33,90 @@ intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-secret_role = "Gamer"
+# secret_role = "Gamer"
 
-bot = commands.Bot(command_prefix='!', intents=intents)
-
-secret_role = "Gamer"
+# bot = commands.Bot(command_prefix='!', intents=intents)
+#
+# secret_role = "Gamer"
 
 @bot.event
 async def on_ready():
     print(f"We are ready to go in, {bot.user.name}")
 
-@bot.event
-async def on_member_join(member):
-    await member.send(f"Welcome to the server {member.name}")
+# @bot.event
+# async def on_member_join(member):
+#     await member.send(f"Welcome to the server {member.name}")
 
-@bot.event
-async def on_message(message):
-    if message.author == bot.user:
-        return
+# @bot.event
+# async def on_message(message):
+#     if message.author == bot.user:
+#         return
+#
+#     if "shit" in message.content.lower():
+#         await message.delete()
+#         await message.channel.send(f"{message.author.mention} - dont use that word!")
+#
+#     await bot.process_commands(message)
+#
+# @bot.command()
+# async def hello(ctx):
+#     await ctx.send(f"Hello {ctx.author.mention}!")
 
-    if "shit" in message.content.lower():
-        await message.delete()
-        await message.channel.send(f"{message.author.mention} - dont use that word!")
+# @bot.command()
+# async def assign(ctx):
+#     role = discord.utils.get(ctx.guild.roles, name=secret_role)
+#     if role:
+#         await ctx.author.add_roles(role)
+#         await ctx.send(f"{ctx.author.mention} is now assigned to {secret_role}")
+#     else:
+#         await ctx.send("Role doesn't exist")
+#
+# @bot.command()
+# async def remove(ctx):
+#     role = discord.utils.get(ctx.guild.roles, name=secret_role)
+#     if role:
+#         await ctx.author.remove_roles(role)
+#         await ctx.send(f"{ctx.author.mention} has had the {secret_role} removed")
+#     else:
+#         await ctx.send("Role doesn't exist")
 
-    await bot.process_commands(message)
+movie_sessions = {}
 
-@bot.command()
-async def hello(ctx):
-    await ctx.send(f"Hello {ctx.author.mention}!")
 
-@bot.command()
-async def assign(ctx):
-    role = discord.utils.get(ctx.guild.roles, name=secret_role)
-    if role:
-        await ctx.author.add_roles(role)
-        await ctx.send(f"{ctx.author.mention} is now assigned to {secret_role}")
+@bot.command(name="watch")
+async def watch(ctx, start_time: str, duration_mins: int, location: str, *, movie_name: str):
+    # Calculate end time
+    now = datetime.now()
+    end_time = now + timedelta(minutes=duration_mins)
+
+    movie_sessions[movie_name.lower()] = {
+        "location": location,
+        "end_time": end_time,
+        "original_name": movie_name
+    }
+
+    await ctx.send(f"🎬 Recorded! **{movie_name}** is playing at **{location}** for the next {duration_mins} minutes.")
+
+
+@bot.command(name="where")
+async def where(ctx):
+    now = datetime.now()
+    active_movies = []
+
+    # Clean up expired movies and find active ones
+    for name, data in list(movie_sessions.items()):
+        if now < data["end_time"]:
+            active_movies.append(f"• **{data['original_name']}** is at **{data['location']}**")
+        else:
+            del movie_sessions[name]
+
+    if active_movies:
+        response = "🍿 **Current Movies Playing:**\n" + "\n".join(active_movies)
     else:
-        await ctx.send("Role doesn't exist")
+        response = "Currently, no movies are being watched. Use `!watch` to start one!"
 
-@bot.command()
-async def remove(ctx):
-    role = discord.utils.get(ctx.guild.roles, name=secret_role)
-    if role:
-        await ctx.author.remove_roles(role)
-        await ctx.send(f"{ctx.author.mention} has had the {secret_role} removed")
-    else:
-        await ctx.send("Role doesn't exist")
+    await ctx.send(response)
+
 
 @bot.command()
 async def dm(ctx, *, msg):
@@ -94,15 +133,15 @@ async def poll(ctx, *, question):
     await poll_message.add_reaction("👍")
     await poll_message.add_reaction("👎")
 
-@bot.command()
-@commands.has_role(secret_role)
-async def secret(ctx):
-    await ctx.send("Welcome to the club!")
-
-@secret.error
-async def secret_error(ctx, error):
-    if isinstance(error, commands.MissingRole):
-        await ctx.send("You do not have permission to do that!")
+# @bot.command()
+# @commands.has_role(secret_role)
+# async def secret(ctx):
+#     await ctx.send("Welcome to the club!")
+#
+# @secret.error
+# async def secret_error(ctx, error):
+#     if isinstance(error, commands.MissingRole):
+#         await ctx.send("You do not have permission to do that!")
 
 # 3. Start both
 keep_alive()
