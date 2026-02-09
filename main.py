@@ -120,22 +120,6 @@ async def where(ctx):
 
     await ctx.send(response)
 
-
-@bot.command()
-async def dm(ctx, *, msg):
-    await ctx.author.send(f"You said {msg}")
-
-@bot.command()
-async def reply(ctx):
-    await ctx.reply("This is a reply to your message!")
-
-@bot.command()
-async def poll(ctx, *, question):
-    embed = discord.Embed(title="New Poll", description=question)
-    poll_message = await ctx.send(embed=embed)
-    await poll_message.add_reaction("👍")
-    await poll_message.add_reaction("👎")
-
 # 3. Start both
 keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
