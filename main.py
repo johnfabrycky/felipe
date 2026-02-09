@@ -36,52 +36,9 @@ intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# secret_role = "Gamer"
-
-# bot = commands.Bot(command_prefix='!', intents=intents)
-#
-# secret_role = "Gamer"
-
 @bot.event
 async def on_ready():
     print(f"We are ready to go in, {bot.user.name}")
-
-# @bot.event
-# async def on_member_join(member):
-#     await member.send(f"Welcome to the server {member.name}")
-
-# @bot.event
-# async def on_message(message):
-#     if message.author == bot.user:
-#         return
-#
-#     if "shit" in message.content.lower():
-#         await message.delete()
-#         await message.channel.send(f"{message.author.mention} - dont use that word!")
-#
-#     await bot.process_commands(message)
-#
-# @bot.command()
-# async def hello(ctx):
-#     await ctx.send(f"Hello {ctx.author.mention}!")
-
-# @bot.command()
-# async def assign(ctx):
-#     role = discord.utils.get(ctx.guild.roles, name=secret_role)
-#     if role:
-#         await ctx.author.add_roles(role)
-#         await ctx.send(f"{ctx.author.mention} is now assigned to {secret_role}")
-#     else:
-#         await ctx.send("Role doesn't exist")
-#
-# @bot.command()
-# async def remove(ctx):
-#     role = discord.utils.get(ctx.guild.roles, name=secret_role)
-#     if role:
-#         await ctx.author.remove_roles(role)
-#         await ctx.send(f"{ctx.author.mention} has had the {secret_role} removed")
-#     else:
-#         await ctx.send("Role doesn't exist")
 
 movie_sessions = {}
 
@@ -146,7 +103,7 @@ async def watch_error(ctx, error):
 
 @bot.command(name="where")
 async def where(ctx):
-    now = datetime.now()
+    now = datetime.now(local_tz)
     active_movies = []
 
     # Clean up expired movies and find active ones
@@ -178,16 +135,6 @@ async def poll(ctx, *, question):
     poll_message = await ctx.send(embed=embed)
     await poll_message.add_reaction("👍")
     await poll_message.add_reaction("👎")
-
-# @bot.command()
-# @commands.has_role(secret_role)
-# async def secret(ctx):
-#     await ctx.send("Welcome to the club!")
-#
-# @secret.error
-# async def secret_error(ctx, error):
-#     if isinstance(error, commands.MissingRole):
-#         await ctx.send("You do not have permission to do that!")
 
 # 3. Start both
 keep_alive()
