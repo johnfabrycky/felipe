@@ -34,6 +34,31 @@ class Movies(commands.Cog):
         start_str = start_dt.strftime("%I:%M %p")
         await ctx.send(f"🎬 **{movie_name}** recorded! Starting at **{start_str}** in **{location}**.")
 
+    @watch.error
+    async def watch_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            embed = discord.Embed(
+                title="🎬 How to use !watch",
+                description="It looks like you missed some details! Here is the correct format:",
+                color=discord.Color.blue()
+            )
+            embed.add_field(
+                name="Format",
+                value="`!watch <duration_mins> <location> <movie_name> [start_time]`",
+                inline=False
+            )
+            embed.add_field(
+                name="Examples",
+                value=(
+                    "**Start now:** `!watch 120 LivingRoom \"The Union\"` \n"
+                    "**Start later:** `!watch 90 Theater \"Inception\" 20:30`"
+                ),
+                inline=False
+            )
+            embed.set_footer(text="Note: If location or movie name has spaces, use \"quotes\".")
+
+            await ctx.send(embed=embed)
+
     @commands.command(name="where")
     async def where(self, ctx):
         now = datetime.now(local_tz)

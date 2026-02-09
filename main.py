@@ -29,8 +29,31 @@ async def on_ready():
 # Keep your help command and other simple commands here
 @bot.command(name="help")
 async def help_command(ctx):
-    # (Existing Help Embed Code)
-    pass
+    embed = discord.Embed(
+        title="🤖 Movie Bot Help",
+        description="I help you track what movies are playing and where!",
+        color=discord.Color.green()
+    )
+
+    embed.add_field(
+        name="🎬 !watch",
+        value=(
+            "**Usage:** `!watch <duration> <location> <movie> [start_time]`\n"
+            "Records a movie session. If no start time is given, it starts now.\n"
+            "*Example:* `!watch 120 LivingRoom \"The Union\" 20:30`"
+        ),
+        inline=False
+    )
+
+    embed.add_field(
+        name="🍿 !where",
+        value="Shows all movies currently playing or starting soon.",
+        inline=False
+    )
+
+    embed.set_footer(text="Pro-tip: Use \"quotes\" if your movie name has spaces!")
+
+    await ctx.send(embed=embed)
 
 if __name__ == "__main__":
     keep_alive()
