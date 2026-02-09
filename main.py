@@ -7,6 +7,7 @@ from flask import Flask
 from threading import Thread
 from datetime import datetime, timedelta
 import pytz
+import pandas as pd
 
 local_tz = pytz.timezone('America/Chicago')
 
@@ -151,6 +152,127 @@ async def where(ctx):
 
     await ctx.send(response)
 
+
+@bot.command(name="meal")
+async def meal(ctx, week: int, day: str, meal_type: str):
+    """
+    Usage: !meal 1 Monday Lunch
+    """
+    try:
+        # Load the CSV (Ensure this file is in your GitHub repo)
+        df = pd.read_csv('Copy of Spring 26 Workschedule - Meal Schedule 2.csv')
+
+        # The actual headers are in row 0
+        headers = df.iloc[0].tolist()
+
+        # Format inputs
+        day_query = day.strip().capitalize()
+        meal_query = meal_type.strip().capitalize()
+        col_name = f"Week {week} - {meal_query}"
+
+        # 1. Find the column index
+        if col_name not in headers:
+            await ctx.send(f"❌ Could not find a column for **Week {week} {meal_query}**.")
+            return
+
+        col_idx = headers.index(col_name)
+
+        # 2. Find the row for the day
+        data_rows = df.iloc[1:]
+        match = data_rows[data_rows['Unnamed: 0'].str.strip().str.capitalize() == day_query]
+
+        if match.empty:
+            await ctx.send(f"❌ Day **{day_query}** not found in the schedule.")
+            return
+
+        # 3. Extract and send the result
+        menu_item = match.iloc[0, col_idx]
+
+        if pd.isna(menu_item) or str(menu_item).lower() == 'nan':
+            await ctx.send(f"🍽️ No {meal_query} is scheduled for {day_query} in Week {week}.")
+        else:
+            await ctx.send(f"🍴 **{day_query} Week {week} {meal_query}:** {menu_item}")
+
+    except FileNotFoundError:
+        await ctx.send("❌ Error: Meal schedule CSV file is missing from the server.")
+    except Exception as e:
+        await ctx.send(f"❌ An unexpected error occurred: {e}")
+
+
+@meal.error
+async def meal_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❓ **Usage:** `!meal <week_num> <day> <lunch/dinner>`\n*Example:* `!meal 1 Monday Dinner`")
+
+
+# Helper function to reuse the CSV logic
+def get_meal_menu_logic(week, day, meal_type):
+    df = pd.read_csv('Copy of Spring 26 Workschedule - Meal Schedule 2.csv')
+    headers = df.iloc[0].tolist()
+    col_name = f"Week {week} - {meal_type}"
+
+    if col_name not in headers: return "Not Found"
+
+    col_idx = headers.index(col_name)
+    data_rows = df.iloc[1:]
+    match = data_rows[data_rows['Unnamed: 0'].str.strip() == day]
+
+    if match.empty: return "No data for this day"
+
+    item = match.iloc[0, col_idx]
+    return item if pd.notna(item) else "No meal scheduled"
+
+def is_uiuc_break(current_date):
+    """Checks if the given date falls during UIUC Spring or Fall break."""
+    # Spring Break 2026: March 14 to March 22
+    spring_break_start = datetime(2026, 3, 14, tzinfo=local_tz)
+    spring_break_end = datetime(2026, 3, 22, 23, 59, tzinfo=local_tz)
+
+    # Thanksgiving Break 2026: Nov 21 to Nov 29
+    fall_break_start = datetime(2026, 11, 21, tzinfo=local_tz)
+    fall_break_end = datetime(2026, 11, 29, 23, 59, tzinfo=local_tz)
+
+    if spring_break_start <= current_date <= spring_break_end:
+        return "Spring Break 🌸"
+    elif fall_break_start <= current_date <= fall_break_end:
+        return "Thanksgiving Break 🍂"
+    return None
+
+
+@bot.command(name="today")
+async def today(ctx):
+    now = datetime.now(local_tz)
+
+    # 1. Check if we are on break first
+    break_name = is_uiuc_break(now)
+    if break_name:
+        await ctx.send(f"🏝️ **Enjoy your {break_name}!** No meals are scheduled today.")
+        return
+
+    # 2. Otherwise, proceed with normal logic
+    day_name = now.strftime("%A")
+
+    # Adjusted week calculation logic
+    semester_start = datetime(2026, 1, 20, tzinfo=local_tz)  # Instruction begins Jan 20
+    days_since_start = (now - semester_start).days
+
+    # If we are past Spring Break, we subtract 7 days to keep the 4-week rotation in sync
+    if now > datetime(2026, 3, 22, tzinfo=local_tz):
+        days_since_start -= 7
+
+    current_week = ((max(0, days_since_start) // 7) % 4) + 1
+
+    lunch = get_meal_menu_logic(current_week, day_name, "Lunch")
+    dinner = get_meal_menu_logic(current_week, day_name, "Dinner")
+
+    embed = discord.Embed(
+        title=f"🍴 Menu for {day_name} (Week {current_week})",
+        color=discord.Color.gold()
+    )
+    embed.add_field(name="Lunch", value=lunch, inline=False)
+    embed.add_field(name="Dinner", value=dinner, inline=False)
+
+    await ctx.send(embed=embed)
 # 3. Start both
 keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
