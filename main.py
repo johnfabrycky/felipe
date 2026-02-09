@@ -30,28 +30,44 @@ async def on_ready():
 @bot.command(name="help")
 async def help_command(ctx):
     embed = discord.Embed(
-        title="🤖 Movie Bot Help",
-        description="I help you track what movies are playing and where!",
+        title="🤖 Bot Command Center",
+        description="I manage movie sessions and the UIUC meal schedule!",
         color=discord.Color.green()
     )
 
+    # Movie Section
     embed.add_field(
-        name="🎬 !watch",
+        name="🎬 Movie Tracking",
         value=(
-            "**Usage:** `!watch <duration> <location> <movie> [start_time]`\n"
-            "Records a movie session. If no start time is given, it starts now.\n"
-            "*Example:* `!watch 120 LivingRoom \"The Union\" 20:30`"
+            "`!watch <mins> <loc> <movie> [time]` - Start a session.\n"
+            "`!where` - See what is playing now."
         ),
         inline=False
     )
 
+    # Meals Section
     embed.add_field(
-        name="🍿 !where",
-        value="Shows all movies currently playing or starting soon.",
+        name="🍽️ Meal Schedule",
+        value=(
+            "`!today` - Automatically shows today's Lunch & Dinner.\n"
+            "`!meal <week> <day> <type>` - Lookup a specific meal.\n"
+            "*Example:* `!meal 2 Tuesday Dinner`"
+        ),
         inline=False
     )
 
-    embed.set_footer(text="Pro-tip: Use \"quotes\" if your movie name has spaces!")
+    # Status/Context Section
+    embed.add_field(
+        name="ℹ️ System Info",
+        value=(
+            "• Dates are synced to **Champaign, IL** time.\n"
+            "• UIUC Spring/Fall breaks are automatically handled.\n"
+            "• Week rotation resets every Monday morning."
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text="Pro-tip: Use \"quotes\" if names or locations have spaces!")
 
     await ctx.send(embed=embed)
 
