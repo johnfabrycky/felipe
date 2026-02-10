@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import os
 from dotenv import load_dotenv
 from keep_alive import keep_alive
@@ -84,6 +85,10 @@ async def help_command(ctx):
     embed.set_footer(text="Pro-tip: Use \"quotes\" if names or locations have spaces!")
 
     await ctx.send(embed=embed)
+
+@bot.hybrid_command(name="test")
+async def test(ctx):
+    await ctx.send("This is a hybrid command!")
 
 if __name__ == "__main__":
     keep_alive()
