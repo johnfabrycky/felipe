@@ -1,168 +1,82 @@
-# import discord
-# from discord.ext import commands
-# from discord import app_commands
-# import os
-# from dotenv import load_dotenv
-# from keep_alive import keep_alive
-#
-# load_dotenv()
-# intents = discord.Intents.default()
-# intents.message_content = True
-# intents.members = True
-#
-# bot = commands.Bot(command_prefix='!', intents=intents)
-# bot.remove_command('help')
-#
-# # Define which cogs to load
-# INITIAL_EXTENSIONS = [
-#     'cogs.meals',
-#     'cogs.movies'
-# ]
-#
-# @bot.hybrid_command(name="test")
-# async def test(ctx):
-#     await ctx.send("This is a hybrid command!")
-#
-# @bot.event
-# async def on_ready():
-#     # Load Extensions
-#     for extension in INITIAL_EXTENSIONS:
-#         try:
-#             # Check if already loaded to prevent errors on reconnect
-#             if extension not in bot.extensions:
-#                 await bot.load_extension(extension)
-#                 print(f"✅ Loaded {extension}")
-#         except Exception as e:
-#             print(f"❌ Failed to load {extension}: {e}")
-#
-#     # 2. Sync Slash Commands
-#     try:
-#         # This makes /today and /where visible in Discord
-#         synced = await bot.tree.sync()
-#         print(f"🚀 Synced {len(synced)} slash commands.")
-#     except Exception as e:
-#         print(f"❌ Slash sync failed: {e}")
-#
-#     print(f"🚀 {bot.user.name} is online and ready in Champaign!")
-#
-# @bot.command()
-# @commands.has_permissions(administrator=True) # Only you (the owner) can run this
-# async def sync(ctx):
-#     try:
-#         synced = await bot.tree.sync()
-#         await ctx.send(f"Successfully synced {len(synced)} commands to the tree.")
-#     except Exception as e:
-#         await ctx.send(f"Failed to sync: {e}")
-#
-# # Keep your help command and other simple commands here
-# @bot.command(name="help")
-# async def help_command(ctx):
-#     embed = discord.Embed(
-#         title="🤖 Bot Command Center",
-#         description="I manage movie sessions and the UIUC meal schedule!",
-#         color=discord.Color.green()
-#     )
-#
-#     # Movie Section
-#     embed.add_field(
-#         name="🎬 Movie Tracking",
-#         value=(
-#             "`!watch <mins> <loc> <movie> [time]` - Start a session.\n"
-#             "`!where` - See what is playing now."
-#         ),
-#         inline=False
-#     )
-#
-#     # Meals Section
-#     embed.add_field(
-#         name="🍽️ Meal Schedule",
-#         value=(
-#             "`!today` - Automatically shows today's Lunch & Dinner.\n"
-#             "`!meal <week> <day> <type>` - Lookup a specific meal.\n"
-#             "*Example:* `!meal 2 Tuesday Dinner`"
-#         ),
-#         inline=False
-#     )
-#
-#     # Status/Context Section
-#     embed.add_field(
-#         name="ℹ️ System Info",
-#         value=(
-#             "• Dates are synced to **Champaign, IL** time.\n"
-#             "• UIUC Spring/Fall breaks are automatically handled.\n"
-#             "• Week rotation resets every Monday morning."
-#         ),
-#         inline=False
-#     )
-#
-#     embed.set_footer(text="Pro-tip: Use \"quotes\" if names or locations have spaces!")
-#
-#     await ctx.send(embed=embed)
-#
-# if __name__ == "__main__":
-#     keep_alive()
-#     bot.run(os.getenv('DISCORD_TOKEN'))
-
-
-# import discord
-# from discord.ext import commands
-# from keep_alive import keep_alive
-# from dotenv import load_dotenv
-# from discord.ext import commands
-# import os
-#
-# load_dotenv()
-#
-# # intents = discord.Intents.default()
-# # intents.message_content = True
-# # intents.members = True
-#
-# bot = commands.Bot(command_prefix='!', intents=discord.Intents.all())
-# bot.remove_command('help')
-#
-#
-# class MyBot(commands.Bot):
-#     def __init__(self):
-#         super().__init__(command_prefix="!", intents=discord.Intents.all())
-#
-#     async def setup_hook(self):
-#         # Load your Cogs here
-#         await self.load_extension('cogs.utility')
-#         print("Synced slash commands.")
-#
-# @bot.command()
-# @commands.has_permissions(administrator=True) # Only you (the owner) can run this
-# async def sync(ctx):
-#     try:
-#         synced = await bot.tree.sync()
-#         await ctx.send(f"Successfully synced {len(synced)} commands to the tree.")
-#     except Exception as e:
-#         await ctx.send(f"Failed to sync: {e}")
-#
-# bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
-#
-# if __name__ == "__main__":
-#     keep_alive()  # <--- Starts the Flask server in a separate thread
-#     bot.run(os.getenv('DISCORD_TOKEN'))
-
-import os
 import discord
 from discord.ext import commands
-from keep_alive import keep_alive
-from dotenv import load_dotenv
-from discord.ext import commands
 import os
-bot = commands.Bot(command_prefix="!",intents=discord.Intents.all()) #intents are required depending on what you wanna do with your bot
+from dotenv import load_dotenv
+from keep_alive import keep_alive
 
-@bot.hybrid_command(name="first_slash")
-async def first_slash(ctx):
-   await ctx.send("You executed the slash command!") #respond no longer works, so i changed it to send
+load_dotenv()
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
+bot.remove_command('help')
+
+# Define which cogs to load
+INITIAL_EXTENSIONS = [
+    'cogs.meals',
+    'cogs.movies',
+    'cogs.lates'
+]
 
 @bot.event
 async def on_ready():
-   await bot.sync() #sync the command tree
-   print("Bot is ready and online")
+    for extension in INITIAL_EXTENSIONS:
+        try:
+            await bot.load_extension(extension)
+            print(f"✅ Loaded {extension}")
+        except Exception as e:
+            print(f"❌ Failed to load {extension}: {e}")
+    await bot.tree.sync()
+    print(f"🚀 Slash commands synced and {bot.user.name} is ready!")
+    print(f"🚀 {bot.user.name} is ready for action in Champaign!")
+
+@bot.command()
+async def sync(ctx):
+    await bot.tree.sync()
+    await ctx.send("Slash commands synced")
+
+@bot.tree.command(name="help", description="List all available commands and bot info")
+async def help_command(interaction: discord.Interaction, ephemeral: bool = True):
+    embed = discord.Embed(
+        title="🤖 Bot Command Center",
+        description="I manage movie sessions, UIUC meal schedules, and late plates!",
+        color=discord.Color.green()
+    )
+
+    # Lates Section
+    embed.add_field(
+        name="🍱 Late Plates",
+        value=(
+            "`/late_me` - Request a late (Temporary or Permanent).\n"
+            "`/view_lates` - See lates for your house group.\n"
+            "`/my_lates` - View all your active late requests.\n"
+            "`/clear_late` - Remove a specific late request."
+        ),
+        inline=False
+    )
+
+    # Movie Section (Updated to all Slash)
+    embed.add_field(
+        name="🎬 Movie Tracking",
+        value=(
+            "`/watch` - Start a session (Visible to everyone).\n"
+            "`/where` - See what is playing now (Private)."
+        ),
+        inline=False
+    )
+
+    # Meals Section (Assuming these will eventually be slash too)
+    embed.add_field(
+        name="🍽️ Meal Schedule",
+        value=(
+            "`/today` - Automatically shows today's Lunch & Dinner.\n"
+        ),
+        inline=False
+    )
+
+    embed.set_footer(text="Pro-tip: Slash commands show you exactly what to type as you go!")
+
+    await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
 
 if __name__ == "__main__":
-    keep_alive()  # <--- Starts the Flask server in a separate thread
+    keep_alive()
     bot.run(os.getenv('DISCORD_TOKEN'))
