@@ -1,5 +1,4 @@
 import discord
-import interaction
 from discord.ext import commands
 from discord import app_commands
 import pandas as pd
@@ -38,11 +37,11 @@ class Meals(commands.Cog):
         return None
 
     @app_commands.command(name="today")
-    async def today(self, ctx):
+    async def today(self, interaction: discord.Interaction):
         now = datetime.now(local_tz)
         break_name = self.is_uiuc_break(now)
         if break_name:
-            return await ctx.send(f"🏝️ **Enjoy your {break_name}!** No meals scheduled.")
+            return await interaction.response.send_message(f"🏝️ **Enjoy your {break_name}!** No meals scheduled.")
 
         semester_start = datetime(2026, 1, 19, tzinfo=local_tz)
         days_since_start = (now - semester_start).days
@@ -55,7 +54,9 @@ class Meals(commands.Cog):
         embed = discord.Embed(title=f"🍴 Menu for {day_name} (Week {current_week})", color=discord.Color.gold())
         embed.add_field(name="Lunch", value=self.get_meal_menu_logic(current_week, day_name, "Lunch"), inline=False)
         embed.add_field(name="Dinner", value=self.get_meal_menu_logic(current_week, day_name, "Dinner"), inline=False)
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
+        return None
 
 
 async def setup(bot):
