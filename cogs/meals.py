@@ -36,12 +36,12 @@ class Meals(commands.Cog):
             return "Spring Break 🌸"
         return None
 
-    @app_commands.command(name="today")
+    @app_commands.command(name="today", description="Get today's menu privately")
     async def today(self, interaction: discord.Interaction):
         now = datetime.now(local_tz)
         break_name = self.is_uiuc_break(now)
         if break_name:
-            return await interaction.response.send_message(f"🏝️ **Enjoy your {break_name}!** No meals scheduled.")
+            return await interaction.response.send_message(f"🏝️ **Enjoy your {break_name}!** No meals scheduled.", ephemeral=True)
 
         semester_start = datetime(2026, 1, 19, tzinfo=local_tz)
         days_since_start = (now - semester_start).days

@@ -7,6 +7,8 @@ from keep_alive import keep_alive
 load_dotenv()
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
+
 bot = commands.Bot(command_prefix='!', intents=intents)
 bot.remove_command('help')
 
@@ -18,15 +20,25 @@ INITIAL_EXTENSIONS = [
 
 @bot.event
 async def on_ready():
+    # Load Extensions
     for extension in INITIAL_EXTENSIONS:
         try:
-            await bot.load_extension(extension)
-            print(f"✅ Loaded {extension}")
+            # Check if already loaded to prevent errors on reconnect
+            if extension not in bot.extensions:
+                await bot.load_extension(extension)
+                print(f"✅ Loaded {extension}")
         except Exception as e:
             print(f"❌ Failed to load {extension}: {e}")
-    await bot.tree.sync()
-    print(f"🚀 Slash commands synced and {bot.user.name} is ready!")
-    print(f"🚀 {bot.user.name} is ready for action in Champaign!")
+
+    # 2. Sync Slash Commands
+    try:
+        # This makes /today and /where visible in Discord
+        synced = await bot.tree.sync()
+        print(f"🚀 Synced {len(synced)} slash commands.")
+    except Exception as e:
+        print(f"❌ Slash sync failed: {e}")
+
+    print(f"🚀 {bot.user.name} is online and ready in Champaign!")
 
 # Keep your help command and other simple commands here
 @bot.command(name="help")
