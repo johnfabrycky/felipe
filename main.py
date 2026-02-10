@@ -24,6 +24,8 @@ async def on_ready():
             print(f"✅ Loaded {extension}")
         except Exception as e:
             print(f"❌ Failed to load {extension}: {e}")
+    await bot.tree.sync()
+    print(f"🚀 Slash commands synced and {bot.user.name} is ready!")
     print(f"🚀 {bot.user.name} is ready for action in Champaign!")
 
 # Keep your help command and other simple commands here

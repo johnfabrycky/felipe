@@ -1,4 +1,5 @@
 import discord
+import interaction
 from discord.ext import commands
 from datetime import datetime, timedelta
 import pytz
@@ -71,7 +72,7 @@ class Movies(commands.Cog):
                 del self.movie_sessions[name]
 
         response = "🍿 **Current Movies Playing:**\n" + "\n".join(active_movies) if active_movies else "Currently, no movies are being watched."
-        await ctx.send(response)
+        await interaction.response.send_message(content=response, ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Movies(bot))
