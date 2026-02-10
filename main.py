@@ -148,7 +148,11 @@
 import os
 import discord
 from discord.ext import commands
-bot = discord.Bot(command_prefix="!",intents=discord.Intents.all()) #intents are required depending on what you wanna do with your bot
+from keep_alive import keep_alive
+from dotenv import load_dotenv
+from discord.ext import commands
+import os
+bot = commands.Bot(command_prefix="!",intents=discord.Intents.all()) #intents are required depending on what you wanna do with your bot
 
 @bot.hybrid_command(name="first_slash")
 async def first_slash(ctx):
@@ -159,4 +163,6 @@ async def on_ready():
    await bot.sync() #sync the command tree
    print("Bot is ready and online")
 
-bot.run("Put your token here")
+if __name__ == "__main__":
+    keep_alive()  # <--- Starts the Flask server in a separate thread
+    bot.run(os.getenv('DISCORD_TOKEN'))
