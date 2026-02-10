@@ -19,6 +19,10 @@ INITIAL_EXTENSIONS = [
     'cogs.movies'
 ]
 
+@bot.hybrid_command(name="test")
+async def test(ctx):
+    await ctx.send("This is a hybrid command!")
+
 @bot.event
 async def on_ready():
     # Load Extensions
@@ -40,6 +44,15 @@ async def on_ready():
         print(f"❌ Slash sync failed: {e}")
 
     print(f"🚀 {bot.user.name} is online and ready in Champaign!")
+
+@bot.command()
+@commands.has_permissions(administrator=True) # Only you (the owner) can run this
+async def sync(ctx):
+    try:
+        synced = await bot.tree.sync()
+        await ctx.send(f"Successfully synced {len(synced)} commands to the tree.")
+    except Exception as e:
+        await ctx.send(f"Failed to sync: {e}")
 
 # Keep your help command and other simple commands here
 @bot.command(name="help")
@@ -85,10 +98,6 @@ async def help_command(ctx):
     embed.set_footer(text="Pro-tip: Use \"quotes\" if names or locations have spaces!")
 
     await ctx.send(embed=embed)
-
-@bot.hybrid_command(name="test")
-async def test(ctx):
-    await ctx.send("This is a hybrid command!")
 
 if __name__ == "__main__":
     keep_alive()
