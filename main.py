@@ -36,7 +36,7 @@ async def sync(ctx):
     await ctx.send("Slash commands synced")
 
 @bot.tree.command(name="help", description="List all available commands and bot info")
-async def help_command(interaction: discord.Interaction, ephemeral: bool = True):
+async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🤖 Bot Command Center",
         #description="I manage movie sessions, UIUC meal schedules, and late plates!",
@@ -49,10 +49,11 @@ async def help_command(interaction: discord.Interaction, ephemeral: bool = True)
         name="🚗 Parking Utility",
         value=(
             "`/offer_spot` - List your parking spot as available.\n"
-            "`/reclaim_spot` - Take your spot back from a claimer. \n"
-            "`/claim_spot` - Claim an available parking spot.\n"
-            "`/unclaim_spot` - Unclaim an available parking spot.\n"
-            "`/parking_status` - See which spots are currently free."
+            "`/claim_spot` - Claim an offered spot or the guest spot (46).\n"
+            "`/claim_staff` - Reserve a staff spot (subject to blackout hours).\n"
+            "`/parking_status` - See which spots are currently free.\n"
+            "`/cancel [spot]` - Reclaim your spot, unclaim a spot, or cancel staff.\n"
+            "`/parking_help` - Detailed guide on rules and blackout times."
         ),
         inline=False
     )
@@ -90,7 +91,7 @@ async def help_command(interaction: discord.Interaction, ephemeral: bool = True)
 
     embed.set_footer(text="Pro-tip: Slash commands show you exactly what to type as you go!")
 
-    await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 if __name__ == "__main__":
     keep_alive()
