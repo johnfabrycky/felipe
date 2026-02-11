@@ -178,31 +178,54 @@ class Parking(commands.Cog):
     @app_commands.command(name="parking_status", description="See current and future availability (Private)")
     async def parking_status(self, interaction: discord.Interaction):
         now = datetime.now(local_tz)
-        day = now.weekday()  # 0=Mon, 4=Fri, 5=Sat, 6=Sun
+        day = now.weekday()
         hour = now.hour
 
-        # 1. Resident Offers Logic (Updated for future start dates)
         lines = []
         for s, d in self.offers.items():
-            current_claimer = next((c for c in self.active_claims.get(s, []) if c["start"] <= now <= c["end"]), None)
+            # 1. Sort claims to find the gaps
+            spot_claims = sorted(self.active_claims.get(s, []), key=lambda x: x['start'])
 
+            # 2. Identify all gaps of 2+ hours within the offer window
+            available_blocks = []
+            current_pointer = d['start']
+
+            for claim in spot_claims:
+                if (claim['start'] - current_pointer) >= timedelta(hours=2):
+                    available_blocks.append((current_pointer, claim['start']))
+                # Move pointer to the end of this claim
+                current_pointer = max(current_pointer, claim['end'])
+
+            # Final gap check
+            if (d['end'] - current_pointer) >= timedelta(hours=2):
+                available_blocks.append((current_pointer, d['end']))
+
+            # 3. Build the display string
+            current_claimer = next((c for c in spot_claims if c["start"] <= now <= c["end"]), None)
+
+            # Start the line with current status
             if current_claimer:
-                status = f"🔴 Occupied until {current_claimer['end'].strftime('%I %p')}"
-            elif now < d['start']:
-                # If the offer hasn't started yet
-                status = f"📅 Available starting {d['start'].strftime('%a %I %p')}"
+                status_header = f"🔴 Occupied until {current_claimer['end'].strftime('%I%p')}"
             else:
-                # If we are within the offer window and no one has claimed it yet
-                status = "🟢 Available Now"
+                # Check if we are currently in an available block
+                is_currently_free = any(start <= now <= end for start, end in available_blocks)
+                status_header = "🟢 Available Now" if is_currently_free else "⚪ Currently Off-Schedule"
 
-            lines.append(f"• **Spot {s}**: {status} (Offer ends {d['end'].strftime('%a %I %p')})")
+            # 4. List ALL future/current available windows for scheduling
+            upcoming_strings = []
+            for start, end in available_blocks:
+                if end > now:  # Only show blocks that haven't passed
+                    icon = "🟢" if start <= now <= end else "📅"
+                    time_fmt = f"{start.strftime('%a %I%p')} - {end.strftime('%a %I%p')}"
+                    upcoming_strings.append(f"{icon} {time_fmt}")
+
+            avail_detail = " | ".join(upcoming_strings) if upcoming_strings else "No future blocks"
+            lines.append(f"• **Spot {s}**: {status_header}\n  └ *Schedule:* {avail_detail}")
 
         res_msg = "\n".join(lines) if lines else "No resident spots currently offered."
 
-        # 2. Staff Logic (Updated with your specific blackout hours)
-        # Blackout 1: Mon-Fri 12 AM - 5 PM
+        # Staff Logic (Blackout: Mon-Fri < 5PM, Sun 2AM-2PM)
         is_weekday_blackout = (day < 5 and hour < 17)
-        # Blackout 2: Sunday 2 AM - 2 PM
         is_sunday_blackout = (day == 6 and 2 <= hour < 14)
 
         if is_weekday_blackout or is_sunday_blackout:
@@ -212,13 +235,10 @@ class Parking(commands.Cog):
             open_staff = self.total_staff_spots - current_staff_users
             staff_status = f"✅ {open_staff}/2 Available Now" if open_staff > 0 else "❌ Fully Occupied"
 
-        # 3. Build the Embed
-        embed = discord.Embed(title="🚗 Current Parking Availability", color=discord.Color.blue())
-        embed.add_field(name="Resident Spots", value=res_msg, inline=False)
+        embed = discord.Embed(title="🚗 Parking availability & Scheduling", color=discord.Color.blue())
+        embed.add_field(name="Resident Spots (2hr+ blocks)", value=res_msg, inline=False)
         embed.add_field(name="Staff Spots", value=staff_status, inline=True)
         embed.add_field(name="Permanent Guest", value=f"Spot {self.perm_guest}: ✅ Available", inline=True)
-
-        # Removed: Timed Guest Spots section is gone.
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
