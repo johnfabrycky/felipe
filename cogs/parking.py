@@ -14,227 +14,266 @@ class Parking(commands.Cog):
         self.perm_guest = 46
         self.offers = {}
         self.active_claims = {}
+        self.staff_claims = []
         self.total_staff_spots = 2
-        self.staff_claims = {}
 
-    # REUSABLE DROPDOWNS
-    day_choices = [app_commands.Choice(name=d.capitalize(), value=d) for d in
-                   ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]]
+    # --- SHARED CHOICES ---
+    DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    day_choices = [app_commands.Choice(name=d.capitalize(), value=d) for d in DAYS]
     time_choices = [app_commands.Choice(name=f"{i % 12 or 12} {'AM' if i < 12 else 'PM'}",
                                         value=f"{i % 12 or 12} {'AM' if i < 12 else 'PM'}") for i in range(24)]
 
-    def parse_time(self, day_str, time_str):
-        days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        target_day = days.index(day_str.lower().strip())
-        now = datetime.now(local_tz)
-        days_ahead = (target_day - now.weekday() + 7) % 7
-        target_date = now + timedelta(days=days_ahead)
-        time_obj = datetime.strptime(time_str.strip().upper(), "%I %p").time()
-        # Ensure we round to the hour to prevent minute-overlap errors
-        return target_date.replace(hour=time_obj.hour, minute=0, second=0, microsecond=0)
+    # --- INTERNAL UTILITIES ---
+    def _parse_range(self, s_day, s_time, e_day, e_time):
+        """Parses start/end choices into localized datetimes with 7-day wrap handling."""
+        now = datetime.now(local_tz).replace(minute=0, second=0, microsecond=0)
 
-    @app_commands.command(name="offer_spot", description="List your spot as available (Public)")
-    @app_commands.describe(spot="Spot number", start_day="Start day", start_time="Start hour", end_day="End day",
-                           end_time="End hour")
+        def to_dt(d_str, t_str):
+            target_day = self.DAYS.index(d_str.lower())
+            days_ahead = (target_day - now.weekday() + 7) % 7
+            t_obj = datetime.strptime(t_str.strip().upper(), "%I %p").time()
+            return (now + timedelta(days=days_ahead)).replace(hour=t_obj.hour)
+
+        start, end = to_dt(s_day, s_time), to_dt(e_day, e_time)
+        return start, (end + timedelta(days=7) if end <= start else end)
+
+    def _get_overlap(self, start, end, existing_list):
+        """Returns True if the timeframe overlaps with any entry in the list."""
+        return any(not (end <= ex["start"] or start >= ex["end"]) for ex in existing_list)
+
+    def _is_blackout(self, start, end):
+        """Checks if range hits: Mon-Fri < 5PM or Sun 2AM-2PM."""
+        curr = start
+        while curr < end:
+            d, h = curr.weekday(), curr.hour
+            if (d < 5 and h < 17) or (d == 6 and 2 <= h < 14): return True
+            curr += timedelta(hours=1)
+        return False
+
+    # --- COMMANDS ---
+    @app_commands.command(name="offer_spot", description="List your spot as available")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def offer_spot(self, interaction: discord.Interaction, spot: int,
                          start_day: app_commands.Choice[str], start_time: app_commands.Choice[str],
                          end_day: app_commands.Choice[str], end_time: app_commands.Choice[str]):
         if spot not in self.valid_spots:
-            return await interaction.response.send_message(f"❌ {spot} is not a valid resident spot.", ephemeral=True)
+            return await interaction.response.send_message(f"❌ Spot {spot} is invalid.", ephemeral=True)
 
-        start_dt = self.parse_time(start_day.value, start_time.value)
-        end_dt = self.parse_time(end_day.value, end_time.value)
-        if end_dt <= start_dt: end_dt += timedelta(days=7)
-
-        self.offers[spot] = {"user_id": interaction.user.id, "start": start_dt, "end": end_dt}
+        start, end = self._parse_range(start_day.value, start_time.value, end_day.value, end_time.value)
+        self.offers[spot] = {"user_id": interaction.user.id, "start": start, "end": end}
         await interaction.response.send_message(
-            f"📢 **Spot {spot}** offered: {start_dt.strftime('%a %I%p')} — {end_dt.strftime('%a %I%p')}")
+            f"📢 **Spot {spot}** listed: {start.strftime('%a %I%p')} — {end.strftime('%a %I%p')}", ephemeral=False)
 
-    @app_commands.command(name="claim_spot", description="Reserve a resident spot (Public)")
-    @app_commands.describe(spot="Spot number", start_day="Start day", start_time="Start hour", end_day="End day",
-                           end_time="End hour")
+    @app_commands.command(name="claim_spot", description="Reserve a resident or guest spot")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def claim_spot(self, interaction: discord.Interaction, spot: int,
                          start_day: app_commands.Choice[str], start_time: app_commands.Choice[str],
                          end_day: app_commands.Choice[str], end_time: app_commands.Choice[str]):
 
-        # Handle windows for Spot 46 vs regular offers
+        c_start, c_end = self._parse_range(start_day.value, start_time.value, end_day.value, end_time.value)
+        now = datetime.now(local_tz)
+
+        # --- GUEST SPOT (46) LOGIC ---
         if spot == self.perm_guest:
-            # Virtual offer window: from now until 2 weeks out
-            off_start = datetime.now(local_tz).replace(hour=0, minute=0, second=0, microsecond=0)
-            off_end = off_start + timedelta(days=14)
-            owner_id = 0
+            # Guest spot is always available for the next 14 days, no "offer" needed
+            w_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            w_end = w_start + timedelta(days=14)
+            owner_id = 0  # System owned
+
+        # --- RESIDENT SPOT LOGIC ---
         elif spot in self.offers:
-            off_start = self.offers[spot]["start"]
-            off_end = self.offers[spot]["end"]
-            owner_id = self.offers[spot]["user_id"]
+            off = self.offers[spot]
+            w_start, w_end, owner_id = off["start"], off["end"], off["user_id"]
+
         else:
-            return await interaction.response.send_message(f"❌ Spot {spot} is not currently offered.", ephemeral=True)
-
-        c_start = self.parse_time(start_day.value, start_time.value)
-        c_end = self.parse_time(end_day.value, end_time.value)
-        if c_end <= c_start: c_end += timedelta(days=7)
-
-        # Update your validation to use 'off_start' and 'off_end' instead of 'offer'
-        if c_start < off_start or c_end > off_end:
-            return await interaction.response.send_message(
-                f"❌ Outside window: {off_start.strftime('%a %I%p')} to {off_end.strftime('%a %I%p')}", ephemeral=True)
-
-        claim_start = self.parse_time(start_day.value, start_time.value)
-        claim_end = self.parse_time(end_day.value, end_time.value)
-        if claim_end <= claim_start: claim_end += timedelta(days=7)
-
-        # Duration checks
-        duration = claim_end - claim_start
-        if duration < timedelta(hours=2) or duration > timedelta(days=7):
-            return await interaction.response.send_message("❌ Reservations must be between 2 hours and 7 days.",
+            return await interaction.response.send_message(f"❌ Spot {spot} is not currently offered by any resident.",
                                                            ephemeral=True)
 
-        # Offer window check
-        if claim_start < offer["start"] or claim_end > offer["end"]:
+        # --- UNIVERSAL VALIDATIONS ---
+
+        # 1. Check if the requested time is within the allowed window
+        if c_start < w_start or c_end > w_end:
             return await interaction.response.send_message(
-                f"❌ Outside window: {offer['start'].strftime('%a %I%p')} to {offer['end'].strftime('%a %I%p')}",
-                ephemeral=True)
+                f"❌ Outside allowed window. For Spot {spot}, you can book between "
+                f"{w_start.strftime('%a %I%p')} and {w_end.strftime('%a %I%p')}.", ephemeral=True)
 
-        # Overlap check
-        spot_claims = self.active_claims.get(spot, [])
-        for existing in spot_claims:
-            if not (claim_end <= existing["start"] or claim_start >= existing["end"]):
-                return await interaction.response.send_message("❌ Spot already reserved during that time.",
-                                                               ephemeral=True)
+        # 2. Check duration constraints (2h to 7 days)
+        duration = c_end - c_start
+        if not (timedelta(hours=2) <= duration <= timedelta(days=7)):
+            return await interaction.response.send_message("❌ Reservations must be between 2 hours and 7 days long.",
+                                                           ephemeral=True)
 
-        if spot not in self.active_claims: self.active_claims[spot] = []
-        self.active_claims[spot].append(
-            {"claimer_id": interaction.user.id, "owner_id": offer["user_id"], "start": claim_start, "end": claim_end})
+        # 3. CONFLICT CHECK: Validate against existing reservations in active_claims
+        existing_claims = self.active_claims.get(spot, [])
+        if self._get_overlap(c_start, c_end, existing_claims):
+            return await interaction.response.send_message(f"❌ Spot {spot} is already reserved during that time.",
+                                                           ephemeral=True)
+
+        # --- COMMIT RESERVATION ---
+        self.active_claims.setdefault(spot, []).append({
+            "claimer_id": interaction.user.id,
+            "owner_id": owner_id,
+            "start": c_start,
+            "end": c_end
+        })
 
         await interaction.response.send_message(
-            f"✅ {interaction.user.mention} reserved **Spot {spot}** until {claim_end.strftime('%a %I%p')}")
+            f"✅ **Spot {spot}** successfully reserved!\n"
+            f"📅 {c_start.strftime('%a %I%p')} — {c_end.strftime('%a %I%p')}", ephemeral=False)
 
-    @app_commands.command(name="claim_staff", description="Claim a staff spot (Respects Blackouts)")
-    @app_commands.describe(start_day="Start day", start_time="Start hour", end_day="End day", end_time="End hour")
+    @app_commands.command(name="claim_staff", description="Reserve a staff spot")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def claim_staff(self, interaction: discord.Interaction,
                           start_day: app_commands.Choice[str], start_time: app_commands.Choice[str],
                           end_day: app_commands.Choice[str], end_time: app_commands.Choice[str]):
-        if interaction.user.id in self.staff_claims:
-            return await interaction.response.send_message("❌ You already have a staff spot claimed.", ephemeral=True)
 
-        claim_start = self.parse_time(start_day.value, start_time.value)
-        claim_end = self.parse_time(end_day.value, end_time.value)
-        if claim_end <= claim_start: claim_end += timedelta(days=7)
+        c_start, c_end = self._parse_range(start_day.value, start_time.value, end_day.value, end_time.value)
 
-        # Blackout Check
-        check_time = claim_start
-        while check_time < claim_end:
-            d, h = check_time.weekday(), check_time.hour
-            if (d < 5 and h < 17) or (d == 6 and 2 <= h < 14):
-                return await interaction.response.send_message(
-                    f"❌ Closed during blackout hours (Mon-Fri 12AM-5PM, Sun 2AM-2PM).", ephemeral=True)
-            check_time += timedelta(hours=1)
+        if self._is_blackout(c_start, c_end):
+            return await interaction.response.send_message("❌ Blackout hours active (Mon-Fri < 5PM or Sun 2AM-2PM).",
+                                                           ephemeral=True)
 
-        # Pool Check
-        overlapping = sum(
-            1 for t in self.staff_claims.values() if not (claim_end <= t["start"] or claim_start >= t["end"]))
-        if overlapping >= self.total_staff_spots:
-            return await interaction.response.send_message("❌ Staff spots full.", ephemeral=True)
+        # Count how many staff spots are already taken during this specific timeframe
+        overlapping_claims = [t for t in self.staff_claims if not (c_end <= t["start"] or c_start >= t["end"])]
 
-        self.staff_claims[interaction.user.id] = {"start": claim_start, "end": claim_end}
-        await interaction.response.send_message(f"✅ Staff Spot reserved until {claim_end.strftime('%a %I%p')}")
+        if len(overlapping_claims) >= self.total_staff_spots:
+            return await interaction.response.send_message("❌ Staff spots are full for this timeframe.", ephemeral=True)
 
-    @app_commands.command(name="parking_status", description="See current availability (Private)")
+        # Add the claim to the list
+        self.staff_claims.append({"user_id": interaction.user.id, "start": c_start, "end": c_end})
+        await interaction.response.send_message(
+            f"✅ Staff Spot reserved: {c_start.strftime('%a %I%p')} — {c_end.strftime('%a %I%p')}", ephemeral=False)
+
+    @app_commands.command(name="parking_status")
     async def parking_status(self, interaction: discord.Interaction):
         now = datetime.now(local_tz).replace(minute=0, second=0, microsecond=0)
-        day, hour = now.weekday(), now.hour
         lines = []
 
-        # Logic for all possible spots (Offers + Permanent Guest)
-        relevant_spots = set(list(self.offers.keys()) + [self.perm_guest])
+        # Ensure Spot 46 is always included in the spots to check
+        all_spots = sorted(set(list(self.offers.keys()) + [self.perm_guest]))
 
-        for s in sorted(relevant_spots):
+        for s in all_spots:
+            # Define window: Spot 46 is always "offered" for the next 7 days
             if s == self.perm_guest:
-                d_start = now.replace(hour=0)
-                d_end = d_start + timedelta(days=7)
-                label = "Permanent Guest (46)"
+                w_start = now.replace(hour=0)
+                w_end = w_start + timedelta(days=7)
             else:
-                d_start = self.offers[s]["start"]
-                d_end = self.offers[s]["end"]
-                label = f"Spot {s}"
-            # 1. Sort claims to find the gaps (Available Blocks)
-            spot_claims = sorted(self.active_claims.get(s, []), key=lambda x: x['start'])
-            available_blocks = []
-            curr_ptr = d['start']
+                w_start, w_end = self.offers[s]["start"], self.offers[s]["end"]
 
-            for c in spot_claims:
-                if (c['start'] - curr_ptr) >= timedelta(hours=2):
-                    available_blocks.append((curr_ptr, c['start']))
-                curr_ptr = max(curr_ptr, c['end'])
+            # Calculate gaps (unclaimed time)
+            claims = sorted(self.active_claims.get(s, []), key=lambda x: x['start'])
+            blocks, ptr = [], w_start
+            for c in claims:
+                if (c['start'] - ptr) >= timedelta(hours=2):
+                    blocks.append((ptr, c['start']))
+                ptr = max(ptr, c['end'])
+            if (w_end - ptr) >= timedelta(hours=2):
+                blocks.append((ptr, w_end))
 
-            if (d['end'] - curr_ptr) >= timedelta(hours=2):
-                available_blocks.append((curr_ptr, d['end']))
+            # Status Formatting
+            current = next((c for c in claims if c["start"] <= now < c["end"]), None)
+            header = f"🔴 Busy until {current['end'].strftime('%a %I%p')}" if current else "🟢 Available Now"
 
-            # 2. Check if the spot is currently occupied
-            current_claimer = next((c for c in spot_claims if c["start"] <= now < c["end"]), None)
+            detail = " | ".join(
+                [f"{'🟢' if b[0] <= now < b[1] else '📅'} {b[0].strftime('%a %I%p')}-{b[1].strftime('%a %I%p')}"
+                 for b in blocks if b[1] > now])
+            lines.append(f"**Spot {s}**: {header}\n└ *Free:* {detail or '❌ Fully Booked'}")
 
-            if current_claimer:
-                header = f"🔴 Occupied until {current_claimer['end'].strftime('%a %I%p')}"
-            else:
-                is_currently_free = any(start <= now < end for start, end in available_blocks)
-                header = "🟢 Available Now" if is_currently_free else "⚪ Currently Off-Schedule"
+        # Staff Logic: Updated to handle self.staff_claims as a LIST
+        is_blk = (now.weekday() < 5 and now.hour < 17) or (now.weekday() == 6 and 2 <= now.hour < 14)
+        active_staff_count = len([t for t in self.staff_claims if t["start"] <= now < t["end"]])
+        staff_status = "❌ Closed" if is_blk else f"✅ {self.total_staff_spots - active_staff_count}/{self.total_staff_spots} Free"
 
-            # 3. Build the "Upcoming" list: ONLY show unclaimed blocks
-            # Since available_blocks only contains the GAPS between claims,
-            # we just need to filter out blocks that have already passed.
-            upcoming = []
-            for start, end in available_blocks:
-                if end > now:
-                    icon = "🟢" if start <= now < end else "📅"
-                    upcoming.append(f"{icon} {start.strftime('%a %I%p')}-{end.strftime('%a %I%p')}")
-
-            # If a block is claimed, it naturally won't exist in 'upcoming' anymore.
-            avail_detail = " | ".join(upcoming) if upcoming else "❌ No remaining 2hr+ blocks"
-            lines.append(f"• **Spot {s}**: {header}\n  └ *Available Blocks:* {avail_detail}")
-
-        # Staff blackout logic
-        is_blackout = (day < 5 and hour < 17) or (day == 6 and 2 <= hour < 14)
-        if is_blackout:
-            staff_status = "❌ Closed (Permit Required)"
-        else:
-            active_staff_claims = len([t for t in self.staff_claims.values() if t["start"] <= now < t["end"]])
-            open_staff = self.total_staff_spots - active_staff_claims
-            staff_status = f"✅ {open_staff}/2 Available Now" if open_staff > 0 else "❌ Fully Occupied"
-
-        embed = discord.Embed(title="🚗 Parking Availability", color=discord.Color.blue())
-        embed.add_field(name="Resident Spots (Unclaimed 2hr+ blocks)",
-                        value="\n".join(lines) if lines else "None offered.", inline=False)
-        embed.add_field(name="Staff Spots", value=staff_status, inline=True)
-        # embed.add_field(name="Permanent Guest", value=f"Spot 46: ✅ Available", inline=True)
-
+        embed = discord.Embed(title="🚗 Parking Status", color=discord.Color.blue())
+        embed.add_field(name="Resident/Guest", value="\n".join(lines) or "No spots offered", inline=False)
+        embed.add_field(name="Staff Spots", value=staff_status)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="unclaim_spot", description="Cancel your reservation")
-    async def unclaim_spot(self, interaction: discord.Interaction, spot: int):
-        if spot in self.active_claims:
-            user_claims = [c for c in self.active_claims[spot] if c["claimer_id"] == interaction.user.id]
-            if user_claims:
-                self.active_claims[spot].remove(user_claims[0])
-                return await interaction.response.send_message(f"🔄 Cancelled reservation for **Spot {spot}**.")
-        await interaction.response.send_message("❌ No reservation found.", ephemeral=True)
+    @app_commands.command(name="cancel")
+    async def cancel(self, interaction: discord.Interaction, spot: int = None):
+        """Unified cancel for staff or resident spots."""
+        user_id = interaction.user.id
+        found = False
 
-    @app_commands.command(name="reclaim_spot", description="Reclaim your spot (Owner Only)")
-    async def reclaim_spot(self, interaction: discord.Interaction, spot: int):
-        if spot in self.offers and self.offers[spot]["user_id"] == interaction.user.id:
+        # 1. Check Staff Claims (Handle as list)
+        initial_count = len(self.staff_claims)
+        self.staff_claims = [c for c in self.staff_claims if not (spot is None and c["user_id"] == user_id)]
+        if len(self.staff_claims) < initial_count:
+            found = True
+            await interaction.response.send_message("🔄 Staff spot reservation(s) cancelled.")
+
+        # 2. Check Resident/Guest Claims
+        if spot and spot in self.active_claims:
+            orig_len = len(self.active_claims[spot])
+            self.active_claims[spot] = [c for c in self.active_claims[spot] if c["claimer_id"] != user_id]
+            if len(self.active_claims[spot]) < orig_len:
+                msg = f"🔄 Cancelled reservation for **Spot {spot}**."
+                if found:
+                    await interaction.followup.send(msg)
+                else:
+                    await interaction.response.send_message(msg)
+                found = True
+
+        # 3. Check Offer Reclaim (Owner withdrawing)
+        if spot and spot in self.offers and self.offers[spot]["user_id"] == user_id:
             del self.offers[spot]
-            if spot in self.active_claims: del self.active_claims[spot]
-            return await interaction.response.send_message(f"🔄 **Spot {spot}** withdrawn.")
-        await interaction.response.send_message("❌ Not your spot.", ephemeral=True)
+            self.active_claims.pop(spot, None)
+            msg = f"🔄 **Spot {spot}** withdrawn by owner."
+            if found:
+                await interaction.followup.send(msg)
+            else:
+                await interaction.response.send_message(msg)
+            found = True
 
-    @app_commands.command(name="unclaim_staff", description="Release staff spot")
-    async def unclaim_staff(self, interaction: discord.Interaction):
-        if self.staff_claims.pop(interaction.user.id, None):
-            return await interaction.response.send_message("🔄 Staff spot released.")
-        await interaction.response.send_message("❌ No claim found.", ephemeral=True)
+        if not found:
+            await interaction.response.send_message("❌ No active record found to cancel.", ephemeral=False)
 
+    @app_commands.command(name="parking_help", description="How to use the parking system")
+    async def parking_help(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="🚗 Parking System Guide",
+            description="Manage resident, guest, and staff parking spots efficiently.",
+            color=discord.Color.blue()
+        )
+
+        # Basic Commands
+        embed.add_field(
+            name="📍 General Commands",
+            value=(
+                "`/parking_status` - View all currently available and reserved spots.\n"
+                "`/cancel [spot]` - Cancel your reservation or withdraw your offer.\n"
+                "   *Leave [spot] blank to cancel Staff reservations.*"
+            ),
+            inline=False
+        )
+
+        # Resident/Guest Section
+        embed.add_field(
+            name="🏠 Resident & Guest Spots",
+            value=(
+                "**Spot 46 (Guest):** Always available to claim up to 14 days in advance.\n"
+                "**Resident Spots (1-33, 41-45):** Must be offered by the owner first.\n\n"
+                "`/offer_spot` - Owners list their spot for others to use.\n"
+                "`/claim_spot` - Reserve an offered resident spot or the guest spot.\n"
+                "   *Note: Claims must be between 2 hours and 7 days long.*"
+            ),
+            inline=False
+        )
+
+        # Staff Section
+        embed.add_field(
+            name="👔 Staff Parking",
+            value=(
+                "`/claim_staff` - Reserve one of the 2 available staff spots.\n"
+                "**Blackout Rules:** Staff spots cannot be reserved during:\n"
+                "• Mon-Fri: Before 5:00 PM\n"
+                "• Sunday: 2:00 AM - 2:00 PM"
+            ),
+            inline=False
+        )
+
+        embed.set_footer(text="All times are in America/Chicago (CST/CDT)")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Parking(bot))
