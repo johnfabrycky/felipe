@@ -14,7 +14,8 @@ bot.remove_command('help')
 INITIAL_EXTENSIONS = [
     'cogs.meals',
     'cogs.movies',
-    # 'cogs.lates'
+    # 'cogs.lates',
+    'cogs.parking',
 ]
 
 @bot.event
@@ -39,8 +40,21 @@ async def help_command(interaction: discord.Interaction, ephemeral: bool = True)
     embed = discord.Embed(
         title="🤖 Bot Command Center",
         #description="I manage movie sessions, UIUC meal schedules, and late plates!",
-        description="I manage movie sessions and meal schedules :)",
+        description="I manage parking, movie sessions, meal schedules",
         color=discord.Color.green()
+    )
+
+    # Parking Section
+    embed.add_field(
+        name="🚗 Parking Utility",
+        value=(
+            "`/offer_spot` - List your parking spot as available.\n"
+            "`/reclaim_spot` - Take your spot back from a claimer. \n"
+            "`/claim_spot` - Claim an available parking spot.\n"
+            "`/unclaim_spot` - Unclaim an available parking spot.\n"
+            "`/parking_status` - See which spots are currently free."
+        ),
+        inline=False
     )
 
     # Lates Section
