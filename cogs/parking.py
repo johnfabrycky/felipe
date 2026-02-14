@@ -1,6 +1,6 @@
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from datetime import datetime, timedelta
 import pytz
 
@@ -51,6 +51,55 @@ class Parking(commands.Cog):
         return False
 
     # --- COMMANDS ---
+    @app_commands.command(name="my_parking", description="View your active offers and reservations")
+    async def my_parking(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        now = datetime.now(local_tz)
+
+        embed = discord.Embed(
+            title="📋 My Parking Activity",
+            color=discord.Color.green(),
+            timestamp=now
+        )
+
+        # 1. Find spots the user has OFFERED (Resident spots)
+        user_offers = [
+            f"**Spot {spot}**: {off['start'].strftime('%a %I%p')} — {off['end'].strftime('%a %I%p')}"
+            for spot, off in self.offers.items() if off["user_id"] == user_id
+        ]
+        embed.add_field(
+            name="📤 My Offers (Listed for others)",
+            value="\n".join(user_offers) if user_offers else "No active offers.",
+            inline=False
+        )
+
+        # 2. Find spots the user has CLAIMED (Resident or Guest 46)
+        user_claims = []
+        for spot, claims in self.active_claims.items():
+            for c in claims:
+                if c["claimer_id"] == user_id:
+                    status = "✅ Active" if c["start"] <= now <= c["end"] else "📅 Upcoming"
+                    user_claims.append(
+                        f"{status} **Spot {spot}**: {c['start'].strftime('%a %I%p')} — {c['end'].strftime('%a %I%p')}"
+                    )
+
+        # 3. Find STAFF spots the user has CLAIMED
+        for sc in self.staff_claims:
+            if sc["user_id"] == user_id:
+                status = "✅ Active" if sc["start"] <= now <= sc["end"] else "📅 Upcoming"
+                user_claims.append(
+                    f"{status} **Staff Spot**: {sc['start'].strftime('%a %I%p')} — {sc['end'].strftime('%a %I%p')}"
+                )
+
+        embed.add_field(
+            name="📥 My Reservations",
+            value="\n".join(user_claims) if user_claims else "No active reservations.",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
     @app_commands.command(name="offer_spot", description="List your spot as available")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def offer_spot(self, interaction: discord.Interaction, spot: int,
@@ -77,7 +126,7 @@ class Parking(commands.Cog):
         if spot == self.perm_guest:
             # Guest spot is always available for the next 14 days, no "offer" needed
             w_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-            w_end = w_start + timedelta(days=14)
+            w_end = w_start + timedelta(days=7)
             owner_id = 0  # System owned
 
         # --- RESIDENT SPOT LOGIC ---
@@ -189,6 +238,26 @@ class Parking(commands.Cog):
         embed.add_field(name="Staff Spots", value=staff_status)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @tasks.loop(minutes=1)
+    async def parking_monitor(self):
+        """Silent cleanup: Removes expired data so the status stays accurate."""
+        now = datetime.now(local_tz)
+
+        # 1. Cleanup Resident/Guest Claims
+        for spot in list(self.active_claims.keys()):
+            # Only keep claims that haven't ended yet
+            self.active_claims[spot] = [c for c in self.active_claims[spot] if c["end"] > now]
+            # Remove the spot key if no claims remain
+            if not self.active_claims[spot]:
+                del self.active_claims[spot]
+
+        # 2. Cleanup Staff Claims
+        self.staff_claims = [sc for sc in self.staff_claims if sc["end"] > now]
+
+        # 3. Cleanup Offers
+        # If an owner's offer window has passed, remove it from the list
+        self.offers = {s: off for s, off in self.offers.items() if off["end"] > now}
+
     @app_commands.command(name="cancel")
     async def cancel(self, interaction: discord.Interaction, spot: int = None):
         """Unified cancel for staff or resident spots."""
@@ -226,7 +295,7 @@ class Parking(commands.Cog):
             found = True
 
         if not found:
-            await interaction.response.send_message("❌ No active record found to cancel.", ephemeral=False)
+            await interaction.response.send_message("❌ No active record found to cancel.", ephemeral=True)
 
     @app_commands.command(name="parking_help", description="How to use the parking system")
     async def parking_help(self, interaction: discord.Interaction):
@@ -251,7 +320,7 @@ class Parking(commands.Cog):
         embed.add_field(
             name="🏠 Resident & Guest Spots",
             value=(
-                "**Spot 46 (Guest):** Always available to claim up to 14 days in advance.\n"
+                "**Spot 46 (Guest):** Always available to claim up to 7 days in advance.\n"
                 "**Resident Spots (1-33, 41-45):** Must be offered by the owner first.\n\n"
                 "`/offer_spot` - Owners list their spot for others to use.\n"
                 "`/claim_spot` - Reserve an offered resident spot or the guest spot.\n"
