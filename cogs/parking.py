@@ -295,48 +295,68 @@ class Parking(commands.Cog):
         # Limit to 25 choices (Discord API maximum)
         return choices[:25]
 
-        # --- UPDATED CANCEL COMMAND ---
+
     @app_commands.command(name="cancel", description="Select a reservation or offer to cancel")
     @app_commands.autocomplete(spot=cancel_spot_autocomplete)
     async def cancel(self, interaction: discord.Interaction, spot: str):
-        """Unified cancel using autocomplete selection."""
+        """Unified cancel with public notifications for cancelled resident offers."""
         user_id = interaction.user.id
-        found = False
 
-        # Handle Staff Cancellation
+        # --- Handle Staff Cancellation ---
         if spot == "staff":
             initial_count = len(self.staff_claims)
             self.staff_claims = [c for c in self.staff_claims if c["user_id"] != user_id]
             if len(self.staff_claims) < initial_count:
-                await interaction.response.send_message("🔄 Staff spot reservation(s) cancelled.", ephemeral=True)
-                return
+                return await interaction.response.send_message("🔄 Staff spot reservation cancelled.", ephemeral=True)
 
-        # Handle Numeric Spots (Resident/Guest)
         try:
             spot_int = int(spot)
         except ValueError:
             return await interaction.response.send_message("❌ Invalid selection.", ephemeral=True)
 
-        # 1. Check if it's an offer they want to withdraw
+        # --- Handle Resident Spot OFFER Withdrawal ---
         if spot_int in self.offers and self.offers[spot_int]["user_id"] == user_id:
-            del self.offers[spot_int]
-            # Optional: Clear claims on that spot if owner withdraws?
-            # (Usually best to keep claims but stop new ones, but per your logic:)
-            self.active_claims.pop(spot_int, None)
-            await interaction.response.send_message(f"🔄 **Spot {spot_int}** withdrawn by owner.", ephemeral=True)
-            return
+            # Check if anyone has claimed this spot before we delete it
+            claims_to_cancel = self.active_claims.get(spot_int, [])
 
-        # 2. Check if it's a claim they want to cancel
+            if claims_to_cancel:
+                # Get unique mention strings for all claimers
+                claimers_to_ping = list(set([f"<@{c['claimer_id']}>" for c in claims_to_cancel]))
+                ping_str = ", ".join(claimers_to_ping)
+
+                # Remove the offer and the claims
+                del self.offers[spot_int]
+                self.active_claims.pop(spot_int, None)
+
+                # Send PUBLIC message with pings
+                return await interaction.response.send_message(
+                    f"⚠️ **Attention {ping_str}**:\n"
+                    f"The owner has withdrawn the offer for **Spot {spot_int}**. "
+                    f"Your active/upcoming reservations for this spot have been **cancelled**. "
+                    f"Please check `/parking_status` to find a new spot!",
+                    ephemeral=False
+                )
+            else:
+                # No claims exist, just withdraw quietly
+                del self.offers[spot_int]
+                return await interaction.response.send_message(
+                    f"🔄 Offer for **Spot {spot_int}** withdrawn.",
+                    ephemeral=True
+                )
+
+        # --- Handle User's own CLAIM Cancellation ---
         if spot_int in self.active_claims:
             orig_len = len(self.active_claims[spot_int])
+            # Filter out only the current user's claims
             self.active_claims[spot_int] = [c for c in self.active_claims[spot_int] if c["claimer_id"] != user_id]
 
             if len(self.active_claims[spot_int]) < orig_len:
                 if not self.active_claims[spot_int]:
                     del self.active_claims[spot_int]
-                await interaction.response.send_message(f"🔄 Cancelled claim for **Spot {spot_int}**.",
-                                                        ephemeral=True)
-                return
+                return await interaction.response.send_message(
+                    f"🔄 You have cancelled your reservation for **Spot {spot_int}**.",
+                    ephemeral=True
+                )
 
         await interaction.response.send_message("❌ No active record found to cancel.", ephemeral=True)
 
