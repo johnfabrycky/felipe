@@ -176,6 +176,7 @@ class Parking(commands.Cog):
                           start_day: app_commands.Choice[str], start_time: app_commands.Choice[str],
                           end_day: app_commands.Choice[str], end_time: app_commands.Choice[str]):
 
+
         c_start, c_end = self._parse_range(start_day.value, start_time.value, end_day.value, end_time.value)
 
         if self._is_blackout(c_start, c_end):
@@ -258,44 +259,86 @@ class Parking(commands.Cog):
         # If an owner's offer window has passed, remove it from the list
         self.offers = {s: off for s, off in self.offers.items() if off["end"] > now}
 
-    @app_commands.command(name="cancel")
-    async def cancel(self, interaction: discord.Interaction, spot: int = None):
-        """Unified cancel for staff or resident spots."""
+    # --- AUTOCOMPLETE LOGIC ---
+    async def cancel_spot_autocomplete(
+            self,
+            interaction: discord.Interaction,
+            current: str,
+    ) -> list[app_commands.Choice[str]]:
+        user_id = interaction.user.id
+        choices = []
+
+        # 1. Check for Staff reservations (represented as a string for the value)
+        for sc in self.staff_claims:
+            if sc["user_id"] == user_id:
+                label = f"Staff Spot: {sc['start'].strftime('%a %I%p')}"
+                if current.lower() in label.lower():
+                    # We use a special string value to identify staff cancellations
+                    choices.append(app_commands.Choice(name=label, value="staff"))
+                break  # Only need one entry if they have one, or loop if they have multiple
+
+        # 2. Check for spots the user is OFFERING (Resident owner)
+        for spot, off in self.offers.items():
+            if off["user_id"] == user_id:
+                label = f"Withdraw Offer: Spot {spot}"
+                if current.lower() in label.lower():
+                    choices.append(app_commands.Choice(name=label, value=str(spot)))
+
+        # 3. Check for spots the user has CLAIMED
+        for spot, claims in self.active_claims.items():
+            for c in claims:
+                if c["claimer_id"] == user_id:
+                    label = f"Cancel Claim: Spot {spot} ({c['start'].strftime('%a %I%p')})"
+                    if current.lower() in label.lower():
+                        choices.append(app_commands.Choice(name=label, value=str(spot)))
+
+        # Limit to 25 choices (Discord API maximum)
+        return choices[:25]
+
+        # --- UPDATED CANCEL COMMAND ---
+    @app_commands.command(name="cancel", description="Select a reservation or offer to cancel")
+    @app_commands.autocomplete(spot=cancel_spot_autocomplete)
+    async def cancel(self, interaction: discord.Interaction, spot: str):
+        """Unified cancel using autocomplete selection."""
         user_id = interaction.user.id
         found = False
 
-        # 1. Check Staff Claims (Handle as list)
-        initial_count = len(self.staff_claims)
-        self.staff_claims = [c for c in self.staff_claims if not (spot is None and c["user_id"] == user_id)]
-        if len(self.staff_claims) < initial_count:
-            found = True
-            await interaction.response.send_message("🔄 Staff spot reservation(s) cancelled.")
+        # Handle Staff Cancellation
+        if spot == "staff":
+            initial_count = len(self.staff_claims)
+            self.staff_claims = [c for c in self.staff_claims if c["user_id"] != user_id]
+            if len(self.staff_claims) < initial_count:
+                await interaction.response.send_message("🔄 Staff spot reservation(s) cancelled.", ephemeral=True)
+                return
 
-        # 2. Check Resident/Guest Claims
-        if spot and spot in self.active_claims:
-            orig_len = len(self.active_claims[spot])
-            self.active_claims[spot] = [c for c in self.active_claims[spot] if c["claimer_id"] != user_id]
-            if len(self.active_claims[spot]) < orig_len:
-                msg = f"🔄 Cancelled reservation for **Spot {spot}**."
-                if found:
-                    await interaction.followup.send(msg)
-                else:
-                    await interaction.response.send_message(msg)
-                found = True
+        # Handle Numeric Spots (Resident/Guest)
+        try:
+            spot_int = int(spot)
+        except ValueError:
+            return await interaction.response.send_message("❌ Invalid selection.", ephemeral=True)
 
-        # 3. Check Offer Reclaim (Owner withdrawing)
-        if spot and spot in self.offers and self.offers[spot]["user_id"] == user_id:
-            del self.offers[spot]
-            self.active_claims.pop(spot, None)
-            msg = f"🔄 **Spot {spot}** withdrawn by owner."
-            if found:
-                await interaction.followup.send(msg)
-            else:
-                await interaction.response.send_message(msg)
-            found = True
+        # 1. Check if it's an offer they want to withdraw
+        if spot_int in self.offers and self.offers[spot_int]["user_id"] == user_id:
+            del self.offers[spot_int]
+            # Optional: Clear claims on that spot if owner withdraws?
+            # (Usually best to keep claims but stop new ones, but per your logic:)
+            self.active_claims.pop(spot_int, None)
+            await interaction.response.send_message(f"🔄 **Spot {spot_int}** withdrawn by owner.", ephemeral=True)
+            return
 
-        if not found:
-            await interaction.response.send_message("❌ No active record found to cancel.", ephemeral=True)
+        # 2. Check if it's a claim they want to cancel
+        if spot_int in self.active_claims:
+            orig_len = len(self.active_claims[spot_int])
+            self.active_claims[spot_int] = [c for c in self.active_claims[spot_int] if c["claimer_id"] != user_id]
+
+            if len(self.active_claims[spot_int]) < orig_len:
+                if not self.active_claims[spot_int]:
+                    del self.active_claims[spot_int]
+                await interaction.response.send_message(f"🔄 Cancelled claim for **Spot {spot_int}**.",
+                                                        ephemeral=True)
+                return
+
+        await interaction.response.send_message("❌ No active record found to cancel.", ephemeral=True)
 
     @app_commands.command(name="parking_help", description="How to use the parking system")
     async def parking_help(self, interaction: discord.Interaction):
