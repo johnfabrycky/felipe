@@ -16,6 +16,7 @@ INITIAL_EXTENSIONS = [
     'cogs.movies',
     # 'cogs.lates',
     'cogs.parking',
+    'cogs.profile',
 ]
 
 @bot.event
