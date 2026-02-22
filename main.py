@@ -46,6 +46,17 @@ async def on_ready():
         bot.meal_cache = []
         print(f"❌ Failed to cache Supabase data: {e}")
 
+    parking_cog = bot.get_cog("Parking")
+
+    if parking_cog:
+        try:
+            await parking_cog.initialize_parking_spots()
+            print("✅ Parking spots initialized successfully")
+        except Exception as e:
+            print(f"❌ Failed to initialize parking spots: {e}")
+    else:
+        print("⚠️ Could not find Parking Cog. Check if the class name is 'Parking'.")
+
     print(f"🚀 {bot.user.name} is ready for action in Champaign!")
 
 @bot.command()
