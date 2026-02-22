@@ -3,12 +3,16 @@ from discord.ext import commands
 import os
 from dotenv import load_dotenv
 from keep_alive import keep_alive
+from supabase import create_client
 
 load_dotenv()
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 bot.remove_command('help')
+url = os.environ.get("SUPABASE_URL")
+key = os.environ.get("SUPABASE_SERVICE_KEY")
+supabase = create_client(url, key)
 
 # Define which cogs to load
 INITIAL_EXTENSIONS = [
@@ -30,9 +34,18 @@ async def on_ready():
     MY_GUILD_ID = 1401634963631247512
     MY_GUILD = discord.Object(id=MY_GUILD_ID)
     await bot.tree.sync(guild=MY_GUILD)
-
     await bot.tree.sync()
-    print(f"🚀 Slash commands synced and {bot.user.name} is ready!")
+
+    # Fetch and cache Supabase data
+    try:
+        response = supabase.table("meals").select("*").execute()
+        # Store as a list of dicts on the bot object for global access
+        bot.meal_cache = response.data
+        print(f"✅ Cached {len(bot.meal_cache)} meals from Supabase")
+    except Exception as e:
+        bot.meal_cache = []
+        print(f"❌ Failed to cache Supabase data: {e}")
+
     print(f"🚀 {bot.user.name} is ready for action in Champaign!")
 
 @bot.command()
