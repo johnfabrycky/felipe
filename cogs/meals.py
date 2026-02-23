@@ -67,7 +67,6 @@ class Meals(commands.Cog):
         )
         embed.add_field(name="☀️ Lunch", value=lunch, inline=False)
         embed.add_field(name="🌙 Dinner", value=dinner, inline=False)
-        embed.set_footer(text="Data provided by Supabase")
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
