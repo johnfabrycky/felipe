@@ -139,7 +139,11 @@ class Lates(commands.Cog):
     async def my_lates(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
 
-        res = supabase.table("lates").select("*").eq("user_id", user_id).execute()
+        res = (supabase
+               .table("lates")
+               .select("*")
+               .eq("user_id", user_id)
+               .execute())
 
         if not res.data:
             return await interaction.response.send_message("You don't have any active lates.", ephemeral=True)
