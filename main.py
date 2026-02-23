@@ -34,7 +34,6 @@ async def on_ready():
     MY_GUILD_ID = 1401634963631247512
     MY_GUILD = discord.Object(id=MY_GUILD_ID)
     await bot.tree.sync(guild=MY_GUILD)
-    await bot.tree.sync()
 
     # Fetch and cache Supabase data
     try:
