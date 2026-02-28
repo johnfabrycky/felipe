@@ -44,7 +44,6 @@ class GeraldBot(commands.Bot):
                 print(f"❌ Failed to load {extension}: {e}")
 
         # 2. Sync Slash Commands (Instant Guild Sync)
-        self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
         print(f"🌲 Tree synced to guild {GUILD_ID}")
 
@@ -73,6 +72,7 @@ bot = GeraldBot()
 @bot.command()
 @commands.is_owner()
 async def sync_global(ctx):
+    bot.tree.clear_commands(guild=None)  # Wipe global list
     await bot.tree.sync()
     await ctx.send("🌍 Global slash commands synced (may take 1 hour).")
 
