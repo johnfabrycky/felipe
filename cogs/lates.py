@@ -1,14 +1,12 @@
-from discord.ext import tasks
+import os
 import discord
+import pytz
+
+from discord.ext import tasks
 from discord.ext import commands
 from discord import app_commands
-import pandas as pd
-import json
-import os
-import io
 from datetime import datetime
 from supabase import create_client
-import pytz
 from flask.cli import load_dotenv
 from datetime import time
 
@@ -196,7 +194,11 @@ class Lates(commands.Cog):
     async def my_lates(self, interaction: discord.Interaction):
         user_id = str(interaction.user.id)
 
-        res = supabase.table("lates").select("*").eq("user_id", user_id).execute()
+        res = (supabase
+               .table("lates")
+               .select("*")
+               .eq("user_id", user_id)
+               .execute())
 
         if not res.data:
             return await interaction.response.send_message("You don't have any active lates.", ephemeral=True)
