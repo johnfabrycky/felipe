@@ -91,7 +91,7 @@ async def help_command(interaction: discord.Interaction):
         "🍱 Lates": "`/late_me`, `/view_lates`, `/my_lates`, `/clear_late`",
         "🎬 Movies": "`/watch`, `/where`",
         "🍽️ Meals": "`/today`",
-        "⚖️ Shifts": "`/offer_shift`, `/view_market`, `/claim_shift`, `/my_shifts` `/cancel_shift`",
+        "⚖️ Shifts": "`/offer_shift`, `/view_market`, `/claim_shift`, `/swap_shift`, /my_shifts`, `/cancel_shift`",
         "📝 Feedback": "`/feedback`",
     }
 
