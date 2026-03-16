@@ -252,23 +252,6 @@ class Parking(commands.Cog):
         if conflict.data:
             return await interaction.response.send_message(f"❌ Spot {spot} is already reserved then.", ephemeral=True)
 
-        # 2. Resident Spot Verification: If not spot 46, check if an offer exists
-        # if spot != self.perm_guest:
-        #     offer = supabase.table("parking_offers") \
-        #         .select("*") \
-        #         .eq("spot_number", spot) \
-        #         .lte("start_time", c_start.isoformat()) \
-        #         .gte("end_time", c_end.isoformat()) \
-        #         .execute()
-        #
-        #     if not offer.data:
-        #         return await interaction.response.send_message(
-        #             f"❌ No resident is offering Spot {spot} for that full window.", ephemeral=True)
-        #
-        #     target_offer_id = offer.data[0]['id']
-        # else:
-        #     target_offer_id = None
-
         # 4. Logic: If NOT a guest spot, verify a Resident Offer exists
         target_offer_id = None
         if not is_guest_spot:
