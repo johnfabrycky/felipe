@@ -24,7 +24,6 @@ class Parking(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.valid_spots = list(range(1, 34)) + list(range(41, 46))
-        self.perm_guest = 46
         self.total_staff_spots = 2
 
     # --- INTERNAL UTILITIES ---
@@ -78,7 +77,7 @@ class Parking(commands.Cog):
             all_spot_configs.append({"spot_number": s, "spot_type": "resident"})
 
         # Permanent Guest spot: 46
-        all_spot_configs.append({"spot_number": 46, "spot_type": "guest"})
+        # all_spot_configs.append({"spot_number": 46, "spot_type": "guest"})
 
         # Staff spots: 998 and 999
         all_spot_configs.append({"spot_number": 998, "spot_type": "staff"})
@@ -233,6 +232,14 @@ class Parking(commands.Cog):
                 "❌ You cannot reserve a spot for more than **7 days**.", ephemeral=True
             )
 
+        # 2. Fetch spot type from Database
+        spot_query = supabase.table("parking_spots").select("is_guest").eq("spot_number", spot).execute()
+
+        if not spot_query.data:
+            return await interaction.response.send_message(f"❌ Spot {spot} is not registered in the system.", ephemeral=True)
+
+        is_guest_spot = spot_query.data[0]['is_guest']
+
         # 1. SQL Overlap Check: See if any existing reservation hits this timeframe
         # Logic: (StartA < EndB) AND (EndA > StartB)
         conflict = supabase.table("parking_reservations") \
@@ -246,7 +253,25 @@ class Parking(commands.Cog):
             return await interaction.response.send_message(f"❌ Spot {spot} is already reserved then.", ephemeral=True)
 
         # 2. Resident Spot Verification: If not spot 46, check if an offer exists
-        if spot != self.perm_guest:
+        # if spot != self.perm_guest:
+        #     offer = supabase.table("parking_offers") \
+        #         .select("*") \
+        #         .eq("spot_number", spot) \
+        #         .lte("start_time", c_start.isoformat()) \
+        #         .gte("end_time", c_end.isoformat()) \
+        #         .execute()
+        #
+        #     if not offer.data:
+        #         return await interaction.response.send_message(
+        #             f"❌ No resident is offering Spot {spot} for that full window.", ephemeral=True)
+        #
+        #     target_offer_id = offer.data[0]['id']
+        # else:
+        #     target_offer_id = None
+
+        # 4. Logic: If NOT a guest spot, verify a Resident Offer exists
+        target_offer_id = None
+        if not is_guest_spot:
             offer = supabase.table("parking_offers") \
                 .select("*") \
                 .eq("spot_number", spot) \
@@ -255,12 +280,9 @@ class Parking(commands.Cog):
                 .execute()
 
             if not offer.data:
-                return await interaction.response.send_message(
-                    f"❌ No resident is offering Spot {spot} for that full window.", ephemeral=True)
+                return await interaction.response.send_message(f"❌ No resident is offering Spot {spot} for that full window.", ephemeral=True)
 
             target_offer_id = offer.data[0]['id']
-        else:
-            target_offer_id = None
 
         # 3. Commit Claim
         claim_data = {
@@ -272,8 +294,7 @@ class Parking(commands.Cog):
         }
         supabase.table("parking_reservations").insert(claim_data).execute()
 
-        await interaction.response.send_message(f"✅ **Spot {spot}** reserved for {c_start.strftime('%a %I%p')}!",
-                                                ephemeral=False)
+        await interaction.response.send_message(f"✅ **Spot {spot}** reserved for {c_start.strftime('%a %I%p')}!", ephemeral=False)
 
     @app_commands.command(name="claim_staff", description="Reserve a staff spot")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
@@ -344,6 +365,9 @@ class Parking(commands.Cog):
         iso_cutoff = one_week_later.isoformat()
         lines = []
 
+        guest_res = supabase.table("parking_spots").select("spot_number").eq("is_guest", True).execute()
+        guest_spot_list = [r['spot_number'] for r in guest_res.data]
+
         # 1. Fetch data: Only get records within the next 7 days
         offers_res = supabase.table("parking_offers") \
             .select("*") \
@@ -376,10 +400,10 @@ class Parking(commands.Cog):
             })
 
         # 4. Process Spots
-        all_spots = sorted(set(list(offers_db.keys()) + [self.perm_guest]))
+        all_spots = sorted(set(list(offers_db.keys()) + guest_spot_list))
 
         for s in all_spots:
-            if s == self.perm_guest:
+            if s in guest_spot_list:
                 windows = [{"start": now.replace(hour=0), "end": one_week_later}]
             else:
                 # Sort and filter offers to ensure they don't exceed the 1-week window
