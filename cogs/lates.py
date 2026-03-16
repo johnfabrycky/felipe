@@ -36,13 +36,13 @@ class Lates(commands.Cog):
         return None
 
     # Anchors the task to run every day at 11:00 PM
-    @tasks.loop(time=time(hour=12, minute=30, second=0))
+    @tasks.loop(time=time(hour=12, minute=35, second=0))
     async def cleanup_temporary_lates(self):
         """Deletes all temporary lates on Saturday night."""
         now = datetime.now(local_tz)
 
         # Check if today is Saturday (5)
-        if now.weekday() == 1:
+        if now.weekday() == 0:
             try:
                 res = supabase.table("lates").delete() \
                     .eq("is_permanent", False) \
