@@ -84,6 +84,4 @@ The bot is hosted on render free tier, and is monitored via uptime robot with ch
 On free tier, the render service cannot be accessed by multiple accounts so John Fabrycky currently is the only person
 with the ability to host the bot. This privilege should be soon given to others, such as future RAs of BHM, and more importantly
 the Koin/Strat/Sutton google profiles (i.e. koinonia308@gmail.com, stratford310@gmail.com, suttonhouse2010@gmail.com).
-=======
-3. Deployment: Merges occur during SCHEDULED MAINTENANCE to ensure stability.
->>>>>>> a60da27ffc1870e543bace5e9d838918d129bbeb
+
