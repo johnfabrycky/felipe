@@ -54,7 +54,6 @@ The 'main' branch is PROTECTED. All new features or bug fixes must be developed 
 1. Branching: For any improvements to current features, use a pre-existing branch (not main). 
 2. Create a new branch if building a new cog (e.g., git checkout -b feature-name).
 2. Pull Requests: Submit a PR to 'main' once work is verified.
-<<<<<<< HEAD
 3. If you wish to preview the behavior of the PR, add [render preview] to the PR title. 
 Then, make sure to deploy the felipe-dev bot on render and invite it to the server. 
 Once done testing the bot, kick it from the server so that it's commands don't continue to appear alongside the commands for felipe-prod. 
@@ -84,4 +83,3 @@ The bot is hosted on render free tier, and is monitored via uptime robot with ch
 On free tier, the render service cannot be accessed by multiple accounts so John Fabrycky currently is the only person
 with the ability to host the bot. This privilege should be soon given to others, such as future RAs of BHM, and more importantly
 the Koin/Strat/Sutton google profiles (i.e. koinonia308@gmail.com, stratford310@gmail.com, suttonhouse2010@gmail.com).
-
