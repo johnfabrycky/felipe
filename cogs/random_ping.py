@@ -6,12 +6,13 @@ import asyncio
 class RandomPing(commands.Cog):
     KOIN_STRAT_SUTTON_CHANNEL_ID = 1402464339352358924
     KOIN_CHANNEL_ID = 1401635095021879416
+    TESTING_CHANNEL_ID = 1407462555974107277
     RICK_ROLL_YT_VIDEO_LINK = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
     def __init__(self, bot):
         self.bot = bot
         # The channel where the ping will actually be sent
-        self.target_channel_id = self.KOIN_CHANNEL_ID
+        self.target_channel_id = self.TESTING_CHANNEL_ID
         self.ping_task = self.bot.loop.create_task(self.ping_loop())
 
     async def ping_loop(self):
@@ -24,15 +25,14 @@ class RandomPing(commands.Cog):
             await asyncio.sleep(wait_time)
             
             send_channel = self.bot.get_channel(self.target_channel_id)
-            koin_channel = self.bot.get_channel(self.KOIN_CHANNEL_ID)
             
-            if send_channel is not None and koin_channel is not None:
+            if send_channel is not None:
                 guild = send_channel.guild
                 
-                # Filter for humans who have permission to view the KOIN_CHANNEL_ID
+                # Filter for humans who have permission to view the target channel
                 eligible_members = [
                     m for m in guild.members 
-                    if not m.bot and koin_channel.permissions_for(m).view_channel
+                    if not m.bot and send_channel.permissions_for(m).view_channel
                 ]
                 
                 if eligible_members:
