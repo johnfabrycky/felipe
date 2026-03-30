@@ -1,8 +1,10 @@
-import discord
-from discord.ext import commands
-from discord import app_commands, ui
-from supabase import create_client, Client
 import os
+
+import discord
+from discord import app_commands, ui
+from discord.ext import commands
+from supabase import create_client, Client
+
 
 # --- MODAL FOR FEEDBACK ---
 class FeedbackModal(ui.Modal, title='Improve Felipe'):
@@ -35,6 +37,7 @@ class FeedbackModal(ui.Modal, title='Improve Felipe'):
             ephemeral=True
         )
 
+
 # --- THE COG ---
 class Feedback(commands.Cog):
     def __init__(self, bot):
@@ -47,6 +50,7 @@ class Feedback(commands.Cog):
     async def feedback(self, interaction: discord.Interaction):
         # Open the popup modal
         await interaction.response.send_modal(FeedbackModal(self.supabase))
+
 
 async def setup(bot):
     await bot.add_cog(Feedback(bot))

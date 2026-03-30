@@ -1,10 +1,11 @@
+import asyncio
+import random
+
 import discord
 from discord.ext import commands
-import random
-import asyncio
+
 
 class RandomPing(commands.Cog):
-
     # note: dialogues will be kept anonymous until after 4/1
     # hint: there are three different movies/scenes from which the quotes are dervied from
 
@@ -30,7 +31,7 @@ class RandomPing(commands.Cog):
         "They won't abstract, they won't leave me... I WON'T LET THEM! I'M BETTER! I'M MORE POWERFUL! I'M THE ORIGINAL! I... AM... GOD!!!!",
         "Don't need to scream if ya ain't got a mouthhh!"
     ]
-    
+
     KOIN_STRAT_SUTTON_CHANNEL_ID = 1401635095021879416
     KOIN_CHANNEL_ID = 1402464339352358924
     TESTING_CHANNEL_ID = 1407462555974107277
@@ -44,40 +45,41 @@ class RandomPing(commands.Cog):
     async def ping_loop(self):
         # Wait until the bot is fully ready and cached before starting
         await self.bot.wait_until_ready()
-        
+
         while not self.bot.is_closed():
             # Generate a random sleep time between 5 minutes and 1 hour
             # random time generation
-            
+
             wait_time = random.uniform(300.0, 1800.0)
             await asyncio.sleep(wait_time)
             send_channel = self.bot.get_channel(self.target_channel_id)
-            
+
             if send_channel is not None:
                 guild = send_channel.guild
-                
+
                 # Filter for humans who have permission to view the channel AND are online/idle/dnd
                 eligible_members = [
-                    m for m in guild.members 
-                    if not m.bot 
-                    and send_channel.permissions_for(m).view_channel
-                    and m.status != discord.Status.offline
+                    m for m in guild.members
+                    if not m.bot
+                       and send_channel.permissions_for(m).view_channel
+                       and m.status != discord.Status.offline
                 ]
-                
+
                 if eligible_members:
                     # Pick a random eligible member and a random quote
                     target = random.choice(eligible_members)
                     quote = random.choice(self.QUOTES)
-                    
+
                     # Send the message and automatically delete it after 5 seconds
                     await send_channel.send(
-                        f"{target.mention} {quote}", 
+                        f"{target.mention} {quote}",
                         delete_after=5
                     )
 
     def cog_unload(self):
         # Ensure the background task is cancelled if the cog is ever unloaded
         self.ping_task.cancel()
+
 
 async def setup(bot):
     await bot.add_cog(RandomPing(bot))

@@ -1,21 +1,22 @@
 import os
-import discord
-import aiohttp
-import pytz
-
-from discord.ext import tasks
-from discord.ext import commands
-from discord import app_commands
 from datetime import datetime
-from supabase import create_client
-from flask.cli import load_dotenv
 from datetime import time
+
+import aiohttp
+import discord
+import pytz
+from discord import app_commands
+from discord.ext import commands
+from discord.ext import tasks
+from flask.cli import load_dotenv
+from supabase import create_client
 
 local_tz = pytz.timezone('America/Chicago')
 load_dotenv()
 url = os.environ.get("SUPABASE_URL")
 key = os.environ.get("SUPABASE_SERVICE_KEY")
 supabase = create_client(url, key)
+
 
 class Lates(commands.Cog):
     def __init__(self, bot):
@@ -140,7 +141,8 @@ class Lates(commands.Cog):
         day=[app_commands.Choice(name=d, value=d) for d in
              ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]],
         meal=[app_commands.Choice(name="Lunch", value="Lunch"), app_commands.Choice(name="Dinner", value="Dinner")],
-        duration = [app_commands.Choice(name="Permanent", value="True"), app_commands.Choice(name="Temporary", value="False")],
+        duration=[app_commands.Choice(name="Permanent", value="True"),
+                  app_commands.Choice(name="Temporary", value="False")],
     )
     async def late_me(self, interaction: discord.Interaction, day: str, meal: str, duration: str):
         # Automatically determine role
@@ -205,17 +207,16 @@ class Lates(commands.Cog):
 
         # Perform the deletion
         res = (supabase.table("lates").delete()
-            .eq("user_id", user_id)
-            .eq("day_of_week", day)
-            .eq("meal", meal)
-            .execute())
+               .eq("user_id", user_id)
+               .eq("day_of_week", day)
+               .eq("meal", meal)
+               .execute())
 
         if res.data:
             await interaction.response.send_message(f"🗑️ Your {day} {meal} late has been cleared.", ephemeral=True)
         else:
             await interaction.response.send_message("❌ Could not find that late. It may have already been cleared.",
                                                     ephemeral=True)
-
 
     @app_commands.command(name="my_lates", description="See all the meals you've requested lates for")
     async def my_lates(self, interaction: discord.Interaction):
@@ -238,6 +239,7 @@ class Lates(commands.Cog):
         embed = discord.Embed(title="📋 Your Registered Lates", description="\n".join(found_lates),
                               color=discord.Color.green())
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 async def setup(bot):
     await bot.add_cog(Lates(bot))
