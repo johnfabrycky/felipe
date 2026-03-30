@@ -1,6 +1,7 @@
 import asyncio
 import random
 
+import discord
 from discord.ext import commands
 
 
@@ -48,10 +49,10 @@ class RandomPing(commands.Cog):
 
                 # Filter for humans who have permission to view the channel AND are online/idle/dnd
                 eligible_members = [
-                    m for m in guild.members 
+                    m for m in guild.members
                     if not m.bot
-                    and send_channel.permissions_for(m).view_channel
-                    and m.status != discord.Status.offline
+                       and send_channel.permissions_for(m).view_channel
+                       and m.status != discord.Status.offline
                 ]
 
                 if eligible_members:
