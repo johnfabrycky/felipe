@@ -3,13 +3,11 @@ import discord
 import aiohttp
 import pytz
 
-from discord.ext import tasks
-from discord.ext import commands
+from discord.ext import tasks, commands
 from discord import app_commands
-from datetime import datetime
+from datetime import datetime, time
 from supabase import create_client
 from flask.cli import load_dotenv
-from datetime import time
 
 local_tz = pytz.timezone('America/Chicago')
 load_dotenv()
