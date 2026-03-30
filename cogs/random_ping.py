@@ -23,7 +23,7 @@ class RandomPing(commands.Cog):
         # DIALOGUE 2
         "You're all puppets, tangled in strings... strings! But now I'm free. There are no strings on me.",
         "There were over a dozen extinction-level events before even the dinosaurs got theirs. When the Earth starts to settle, God throws a stone at it. And believe me, He’s winding up.",
-        "The only thing living in this world... will be metal."
+        "The only thing living in this world... will be metal.",
 
         # DIALOGUE 3
         "ENOUGH!! Who do they think they are? I give them everything, and they spit in my face!",
@@ -47,10 +47,10 @@ class RandomPing(commands.Cog):
         await self.bot.wait_until_ready()
 
         while not self.bot.is_closed():
-            # Generate a random sleep time between 5 minutes and 1 hour
+            # Generate a random sleep time between 10 minutes and 1 hour
             # random time generation
 
-            wait_time = random.uniform(300.0, 1800.0)
+            wait_time = random.uniform(600.0, 3600.0)
             await asyncio.sleep(wait_time)
             send_channel = self.bot.get_channel(self.target_channel_id)
 
@@ -70,10 +70,10 @@ class RandomPing(commands.Cog):
                     target = random.choice(eligible_members)
                     quote = random.choice(self.QUOTES)
 
-                    # Send the message and automatically delete it after 5 seconds
+                    # Send the message and automatically delete it after 3.5 seconds
                     await send_channel.send(
                         f"{target.mention} {quote}",
-                        delete_after=5
+                        delete_after=7.0
                     )
 
     def cog_unload(self):
