@@ -124,24 +124,30 @@ the Koin/Strat/Sutton google profiles (ask an RA of BHM if you need the email ad
 8. Under environment, you need to add three environment variables. They will be named DISCORD_TOKEN,
    SUPABASE_SERVICE_KEY,
    and SUPABASE_URL.
-    1. DISCORD_TOKEN - First option: find whoever is currently hosting the bot and ask them to share the token with you.
+   Under the environment tab, click edit on the "Environment Variables" Section. In the bottom left of the box,
+   click "+Add Variable". Where the placeholder text reads "NAME_OF_VARIABLE", put the variable name. Do this
+   for each of the variables named above. 
+    1. DISCORD_TOKEN - First option: find whoever is currently hosting the bot (John Fabrycky as of 3/31/26) and ask them to share the token with you.
        Otherwise, go to the discord developer [portal](https://discord.com/developers/home). Select the Felipe bot, then
        select
        the Bot tab, then under Token, press Reset Token. ONLY do this if you are unable to contact the person who
        currently
-       has the Token because it will invalidate the current Token.
-    2. SUPABASE_URL - Go to Supabase and select the "kss discord bot". Then go to Integrations -> DATA API -> API URL.
+       has the Token because it will invalidate the current Token. Place the token in the box to the right of where
+       you put the name "DISCORD_TOKEN" and save.
+    3. SUPABASE_URL - Go to Supabase and select the "kss discord bot". Then go to Integrations -> DATA API -> API URL.
        Copy
-       the API URL.
-    3. SUPABASE_SERVICE_KEY - On Supabase, go to Settings -> Configuration -> API Keys, then under "Secret Keys", find
+       the API URL. Paste it in the appropriate box corresponding to "SUPABASE_URL" in the Render environment page.
+    4. SUPABASE_SERVICE_KEY - On Supabase, go to Settings -> Configuration -> API Keys, then under "Secret Keys", find
        the
-       default key, press the "copy" icon to put it on your clipboard, then return to render environment and enter it.
-9. Select the Events tab, then find the "Manual Deploy" button, click it and select "Deploy latest commit".
-10. Go to Monitor -> Logs. It should build in under 5 minutes, with the success message "==> Your service is live 🎉",
+       default key, press the "copy" icon to put it on your clipboard, then return to render environment and paste it into the appropriate box.
+10. Select the Events tab, then find the "Manual Deploy" button, click it and select "Deploy latest commit".
+11. Go to Monitor -> Logs. It should build in under 5 minutes, with the success message "==> Your service is live 🎉",
     and no error messages.
-11. Go to Events. ON the top bar towards the bottom there will be a purple link with a copy symbol next to it, that
-    ends in "onrender.com". Copy the link to your clipboard.
-12. On UptimeRobot, create a new Monitor. Under "URL to monitor", enter the monitor from your clipboard. Under
+12. Go to Events. ON the top bar towards the bottom there will be a purple link with a copy symbol next to it, that
+    ends in "onrender.com".
+    <img width="1611" height="541" alt="Felipe_ping_instr_picture" src="https://github.com/user-attachments/assets/8f8181ee-beb3-49f4-bdcf-f808ed7aabc3" />
+    Copy the link (a.k.a monitor) to your clipboard.
+14. On UptimeRobot, create a new Monitor. Under "URL to monitor", enter the monitor from your clipboard. Under
     "How will we notify you?", select your preferred means of notification for a down event. Under "Monitor interval",
     leave it at 5m. Then click "Create monitor".
-13. Congratulations, you have fully configured the discord bot to run on a hosted service for free 🎉🎺🎉🎺.
+15. Congratulations, you have fully configured the discord bot to run on a hosted service for free 🎉🎺🎉🎺.
