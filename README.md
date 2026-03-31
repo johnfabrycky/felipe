@@ -3,6 +3,18 @@
 A multi-purpose utility bot for the KSS community, managing parking, meal schedules, late plates, and social movie
 sessions.
 
+## 📖 Table of Contents
+1. [Active Functionality](#-active-functionality)
+    * [Parking Utility](#-parking-utility)
+    * [Late Plates](#-late-plates)
+    * [Meal Schedule](#-meal-schedule)
+    * [Feedback](#-feedback)
+2. [To-Implement](#-to-implement)
+3. [Development & Branching](#-development--branching)
+4. [Trouble-shooting a down event](#-trouble-shooting-a-down-event)
+5. [Maintenance](#-maintenance)
+6. [How to host the bot](#-how-to-host-the-bot)
+
 # FOR APRIL FOOLS WE ARE GOING TO RANDOMLY PING SOMEONE EVERY 3-6 MINUTES FOR THE WHOLE 24 HOURS
 
 ## 🚀 Active Functionality
