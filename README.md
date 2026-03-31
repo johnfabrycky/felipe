@@ -70,8 +70,13 @@ Pull Request.
 1. Branching: For any improvements to current features, use a pre-existing branch (not main).
 2. Create a new branch if building a new cog (e.g., git checkout -b feature-name).
 3. If developing in PyCharm, run "Code->Reformat Code" from your root directory, as shown in the screenshot.
-   <img width="714" height="618" alt="image" src="https://github.com/user-attachments/assets/fe242820-dce4-48c0-bd52-eee0177a4a62" />
+   <div>
+      <img width="714" height="618" alt="image" src="https://github.com/user-attachments/assets/fe242820-dce4-48c0-bd52-eee0177a4a62" />
+   </div>
+   
    If developing in VSCode, install the Ruff extension, then add this to your settings.json file:
+   
+   ```json
    {
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
@@ -81,7 +86,7 @@ Pull Request.
             "source.fixAll": "explicit"
         }
     }
-}
+   }
 This will run "Optimize Imports" and "Reformat Code" every time you save.
 2. Pull Requests: Submit a PR to 'main' once work is verified.
 3. If you wish to preview the behavior of the PR, add [render preview] to the PR title.
@@ -165,9 +170,11 @@ the Koin/Strat/Sutton google profiles (ask an RA of BHM if you need the email ad
     and no error messages.
 14. Go to Events. ON the top bar towards the bottom there will be a purple link with a copy symbol next to it, that
     ends in "onrender.com".
-    <img width="1611" height="541" alt="Felipe_ping_instr_picture" src="https://github.com/user-attachments/assets/8f8181ee-beb3-49f4-bdcf-f808ed7aabc3" />
+    <div>
+       <img width="1611" height="541" alt="Felipe_ping_instr_picture" src="https://github.com/user-attachments/assets/8f8181ee-beb3-49f4-bdcf-f808ed7aabc3" />
+    </div>
     Copy the link (a.k.a monitor) to your clipboard.
-15. On UptimeRobot, create a new Monitor. Under "URL to monitor", enter the monitor from your clipboard. Under
+16. On UptimeRobot, create a new Monitor. Under "URL to monitor", enter the monitor from your clipboard. Under
     "How will we notify you?", select your preferred means of notification for a down event. Under "Monitor interval",
     leave it at 5m. Then click "Create monitor".
-16. Congratulations, you have fully configured the discord bot to run on a hosted service for free 🎉🎺🎉🎺.
+17. Congratulations, you have fully configured the discord bot to run on a hosted service for free 🎉🎺🎉🎺.
