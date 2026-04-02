@@ -7,6 +7,8 @@ from discord.ext import commands
 from helpers.constants import WEEKDAYS, VALID_SPOTS, LOCAL_TZ, STAFF_SPOTS
 from helpers.parking_service import ParkingService
 
+from collections import Counter
+
 
 class Parking(commands.Cog):
     day_choices = [app_commands.Choice(name=name, value=obj.weekday) for obj, name in WEEKDAYS]
@@ -21,12 +23,56 @@ class Parking(commands.Cog):
     async def initialize_parking_spots(self):
         await self.service.initialize_spots()  # You'd need to create this in Service
 
+    @app_commands.command(name="my_parking", description="View your active offers and reservations")
+    async def my_parking(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
+        now = datetime.now(LOCAL_TZ)
+
+        # Ask the Service for the user's data
+        raw_offers, raw_claims = await self.service.get_user_activity(user_id)
+
+        embed = discord.Embed(
+            title="📋 My Parking Activity",
+            color=discord.Color.green(),
+            timestamp=now
+        )
+
+        # 1. Format Offers
+        offer_groups = Counter()
+        for off in (raw_offers or []):
+            start = datetime.fromisoformat(off['start_time']).astimezone(LOCAL_TZ)
+            end = datetime.fromisoformat(off['end_time']).astimezone(LOCAL_TZ)
+            # Create a unique key based on the day of week and time
+            time_key = f"**Spot {off['spot_number']}**: {start.strftime('%a %I%p')} — {end.strftime('%a %I%p')}"
+            offer_groups[time_key] += 1
+
+        offer_lines = [f"{key} (x{count})" if count > 1 else key for key, count in offer_groups.items()]
+        embed.add_field(name="📤 My Offers", value="\n".join(offer_lines) or "No active offers.", inline=False)
+
+        # 2. Format Claims (Reservations)
+        claim_groups = Counter()
+        for c in (raw_claims or []):
+            start = datetime.fromisoformat(c['start_time']).astimezone(LOCAL_TZ)
+            end = datetime.fromisoformat(c['end_time']).astimezone(LOCAL_TZ)
+            spot_label = "Staff Spot" if c['spot_number'] in STAFF_SPOTS else f"Spot {c['spot_number']}"
+            time_key = f"**{spot_label}**: {start.strftime('%a %I%p')} — {end.strftime('%a %I%p')}"
+            claim_groups[time_key] += 1
+
+        claim_lines = [f"{key} (x{count})" if count > 1 else key for key, count in claim_groups.items()]
+        embed.add_field(
+            name="📥 My Reservations",
+            value="\n".join(claim_lines) or "No active reservations.",
+            inline=False
+        )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @app_commands.command(name="offer_spot", description="List your spot as available")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def offer_spot(self, interaction: discord.Interaction, spot: int,
                          start_day: app_commands.Choice[int], start_time: app_commands.Choice[str],
                          end_day: app_commands.Choice[int], end_time: app_commands.Choice[str],
-                         weeks: int = 1):
+                         weeks: app_commands.Range[int, 1, 12] = 1):
         if spot not in VALID_SPOTS:
             return await interaction.response.send_message(f"❌ Spot {spot} is invalid.", ephemeral=True)
 
@@ -41,7 +87,7 @@ class Parking(commands.Cog):
         success, msg = await self.service.create_offers(interaction.user.id, spot, start, end, weeks)
         await interaction.response.send_message(msg, ephemeral=not success)
 
-    @app_commands.command(name="claim_spot")
+    @app_commands.command(name="claim_spot", description="Reserve a resident or guest spot")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def claim_spot(self, interaction: discord.Interaction, spot: int,
                          start_day: app_commands.Choice[int], start_time: app_commands.Choice[str],
@@ -55,7 +101,7 @@ class Parking(commands.Cog):
         success, msg = await self.service.claim_resident_spot(interaction.user.id, spot, start, end)
         await interaction.response.send_message(msg, ephemeral=not success)
 
-    @app_commands.command(name="claim_staff")
+    @app_commands.command(name="claim_staff", description="Reserve a staff spot")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def claim_staff(self, interaction: discord.Interaction,
                           start_day: app_commands.Choice[int], start_time: app_commands.Choice[str],
@@ -207,12 +253,58 @@ class Parking(commands.Cog):
 
         await interaction.response.send_message(msg, ephemeral=True)
 
-    @app_commands.command(name="parking_help")
+    @app_commands.command(name="parking_help", description="How to use the parking system")
     async def parking_help(self, interaction: discord.Interaction):
-        embed = discord.Embed(title="🚗 Parking Guide", color=discord.Color.blue())
-        embed.add_field(name="Resident Spots", value="1-33, 41-45 (Must be offered first)")
-        embed.add_field(name="Guest Spot", value="46 (Always open to claim)")
+        # 1. Fetch formatted guest list string from the Service
+        guest_list_str = await self.service.get_guest_spot_list()
+
+        embed = discord.Embed(
+            title="🚗 Parking System Guide",
+            description="Manage resident, guest, and staff parking spots efficiently.",
+            color=discord.Color.blue()
+        )
+
+        # Basic Commands
+        embed.add_field(
+            name="📍 General Commands",
+            value=(
+                "`/parking_status` - View all currently available and reserved spots.\n"
+                "`/my_parking` - View your active offers and reservations.\n"
+                "`/cancel [spot]` - Cancel your reservation or withdraw your offer.\n"
+                "   *Leave [spot] blank to cancel Staff reservations.*"
+            ),
+            inline=False
+        )
+
+        # Resident/Guest Section
+        embed.add_field(
+            name="🏠 Resident & Guest Spots",
+            value=(
+                f"**Guest Spot(s): {guest_list_str}**\n"
+                "Always available to claim up to 7 days in advance.\n\n"
+                "**Resident Spots (1-33, 41-45):** Must be offered by the owner first.\n\n"
+                "`/offer_spot` - Owners list their spot for others to use.\n"
+                "`/claim_spot` - Reserve an offered resident spot or the guest spot.\n"
+                "   *Note: Claims must be between 2 hours and 7 days long.* "
+            ),
+            inline=False
+        )
+
+        # Staff Section
+        embed.add_field(
+            name="⛪ Staff Parking",
+            value=(
+                "`/claim_staff` - Reserve one of the 2 available staff spots.\n"
+                "**Blackout Rules:** Staff spots cannot be reserved during:\n"
+                "• Mon-Fri: Before 5:00 PM\n"
+                "• Sunday: 2:00 AM - 2:00 PM"
+            ),
+            inline=False
+        )
+
+        embed.set_footer(text="All times are in America/Chicago (CST/CDT)")
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
 
 
 async def setup(bot):
