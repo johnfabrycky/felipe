@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from supabase import create_client
 
-from constants import LOCAL_TZ, STAFF_SPOTS, GUEST_SPOTS, VALID_SPOTS
+from helpers.constants import LOCAL_TZ, STAFF_SPOTS, GUEST_SPOTS, VALID_SPOTS
 
 
 class ParkingService:
@@ -16,19 +16,35 @@ class ParkingService:
     def parse_range(self, s_day_int, s_time_str, e_day_int, e_time_str):
         now = datetime.now(LOCAL_TZ).replace(minute=0, second=0, microsecond=0)
 
+        # 1. Map the integers back to the dateutil weekday objects
+        from dateutil.relativedelta import MO, TU, WE, TH, FR, SA, SU
+        day_map = {0: MO, 1: TU, 2: WE, 3: TH, 4: FR, 5: SA, 6: SU}
+
         def to_dt(day_val, time_str, reference_date):
             t_obj = datetime.strptime(time_str.strip().upper(), "%I %p").time()
+
+            # 2. Look up the proper object using the integer
+            real_day = day_map[int(day_val)]
+
             dt = reference_date + relativedelta(
-                weekday=day_val, hour=t_obj.hour, minute=0, second=0, microsecond=0
+                weekday=real_day,
+                hour=t_obj.hour,
+                minute=0, second=0, microsecond=0
             )
+
+            # If the calculated time is in the past, push it 1 week forward
             if dt <= reference_date:
                 dt += relativedelta(weeks=1)
             return dt
 
+        # 3. Calculate start and end
         start = to_dt(s_day_int, s_time_str, now)
         end = to_dt(e_day_int, e_time_str, start)
+
+        # 4. Final safety check
         if end == start:
             end += relativedelta(weeks=1)
+
         return start, end, end - start
 
     async def initialize_spots(self):
@@ -77,10 +93,12 @@ class ParkingService:
         return offers.data, claims.data, [r['spot_number'] for r in guests.data]
 
     async def create_offers(self, user_id, spot, base_start, base_end, weeks):
+        """Logic for /offer_spot including recurring weeks."""
         all_offers = []
         for i in range(weeks):
             start = base_start + timedelta(weeks=i)
             end = base_end + timedelta(weeks=i)
+
             # Check for existing offer overlap
             existing = self.supabase.table("parking_offers").select("*").eq("spot_number", spot).lt("start_time",
                                                                                                     end.isoformat()).gt(
@@ -93,10 +111,19 @@ class ParkingService:
                 })
 
         if not all_offers:
-            return False, "❌ Spot already offered for those times."
+            return False, "❌ This spot is already offered for those times."
 
-        self.supabase.table("parking_offers").insert(all_offers).execute()
-        return True, f"📢 **Spot {spot}** listed for {weeks} week(s)!"
+        try:
+            self.supabase.table("parking_offers").insert(all_offers).execute()
+
+            # --- RESTORED FORMATTING ---
+            recur_msg = f" for the next **{weeks} weeks**" if weeks > 1 else ""
+            success_msg = f"📢 **Spot {spot}** listed{recur_msg}: {base_start.strftime('%a %I%p')} — {base_end.strftime('%a %I%p')}"
+
+            return True, success_msg
+
+        except Exception as e:
+            return False, f"❌ Database error: {e}"
 
     async def claim_resident_spot(self, user_id, spot, start, end):
         conflict = self.supabase.table("parking_reservations").select("*").eq("spot_number", spot).lt("start_time",
@@ -162,6 +189,40 @@ class ParkingService:
             self.supabase.table("parking_reservations").delete().in_("id", ids).execute()
             return True, f"🔄 Reservation for Spot {spot_num} cancelled.", None
 
+    async def get_user_activity(self, user_id):
+        """Fetches active offers and reservations for a specific user."""
+        now_iso = datetime.now(LOCAL_TZ).isoformat()
+
+        offers = self.supabase.table("parking_offers") \
+            .select("*") \
+            .eq("owner_id", str(user_id)) \
+            .gt("end_time", now_iso) \
+            .execute()
+
+        claims = self.supabase.table("parking_reservations") \
+            .select("*") \
+            .eq("claimer_id", str(user_id)) \
+            .gt("end_time", now_iso) \
+            .execute()
+
+        return offers.data, claims.data
+
+    async def get_guest_spot_list(self) -> str:
+        """Fetches guest spot numbers and returns a formatted string."""
+        try:
+            # Query the parking_spots table for is_guest = True
+            response = self.supabase.table("parking_spots") \
+                .select("spot_number") \
+                .eq("is_guest", True) \
+                .execute()
+
+            # Map the results to a comma-separated string
+            guest_spots = [str(r['spot_number']) for r in response.data]
+            return ", ".join(guest_spots) if guest_spots else "None"
+        except Exception as e:
+            print(f"⚠️ Service Error fetching guest spots for help: {e}")
+            return "Error loading spots"
+
     def get_merged_availability(self, now, cutoff, raw_offers, raw_claims, is_guest=False):
         """
         Pure Logic: Consolidates offers, subtracts claims, and returns (header, blocks).
@@ -203,20 +264,24 @@ class ParkingService:
             if (w_end - ptr) >= timedelta(hours=2):
                 blocks.append((ptr, w_end))
 
-        # 3. Determine Header Status
-        is_offered_now = any(w["start"] <= now < w["end"] for w in merged_windows)
+        # 3. Determine Header Status (UPDATED LOGIC)
         current_claim = next((c for c in raw_claims if c["start"] <= now < c["end"]), None)
 
-        if current_claim:
-            header = f"🔴 Busy until {current_claim['end'].strftime('%a %I%p')}"
-        elif not is_offered_now:
-            upcoming = next((w for w in merged_windows if w["start"] > now), None)
-            header = f"🕒 Unavailable (Next: {upcoming['start'].strftime('%a %I%p')})" if upcoming else "❌ Not Offered"
+        # Find the currently active free block, if any
+        active_block = next((b for b in blocks if b[0] <= now < b[1]), None)
+        # Find the very next upcoming free block
+        next_block = next((b for b in blocks if b[0] > now), None)
+
+        if active_block:
+            header = f"🟢 Available Now (until {active_block[1].strftime('%a %I%p')})"
+        elif current_claim:
+            if next_block:
+                header = f"🔴 Busy (Next: {next_block[0].strftime('%a %I%p')})"
+            else:
+                header = f"🔴 Busy until {current_claim['end'].strftime('%a %I%p')}"
+        elif next_block:
+            header = f"🕒 Unavailable (Next: {next_block[0].strftime('%a %I%p')})"
         else:
-            limit = next((w["end"] for w in merged_windows if w["start"] <= now < w["end"]), cutoff)
-            upcoming_claim = next((c for c in raw_claims if c["start"] > now), None)
-            if upcoming_claim and upcoming_claim['start'] < limit:
-                limit = upcoming_claim['start']
-            header = f"🟢 Available Now (until {limit.strftime('%a %I%p')})"
+            header = "❌ Not Offered"
 
         return header, blocks
