@@ -19,7 +19,10 @@ supabase = create_client(url, key)
 
 
 class Lates(commands.Cog):
+    """Commands and scheduled cleanup for the late-plate system."""
+
     def __init__(self, bot):
+        """Initialize the cog and start the nightly cleanup loop."""
         self.bot = bot
         self.days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         self.meals = ["Lunch", "Dinner"]
@@ -105,6 +108,7 @@ class Lates(commands.Cog):
         meal=[app_commands.Choice(name="Lunch", value="Lunch"), app_commands.Choice(name="Dinner", value="Dinner")]
     )
     async def view_lates(self, interaction: discord.Interaction, day: str, meal: str):
+        """Show late requests visible to the caller's house group for one meal."""
         await interaction.response.defer(ephemeral=True)
 
         house = self._get_user_house(interaction.user)
@@ -148,6 +152,7 @@ class Lates(commands.Cog):
                   app_commands.Choice(name="Temporary", value="False")],
     )
     async def late_me(self, interaction: discord.Interaction, day: str, meal: str, duration: str):
+        """Create a temporary or permanent late request for the caller."""
         await interaction.response.defer(ephemeral=True)  # Defer first
 
         house = self._get_user_house(interaction.user)
@@ -173,6 +178,7 @@ class Lates(commands.Cog):
             interaction: discord.Interaction,
             current: str,
     ) -> list[app_commands.Choice[str]]:
+        """Return the caller's existing lates as autocomplete choices."""
         user_id = str(interaction.user.id)
 
         # Fetch all lates for this specific user
@@ -200,6 +206,7 @@ class Lates(commands.Cog):
     @app_commands.command(name="clear_late", description="Select an existing late request to remove")
     @app_commands.autocomplete(selection=late_days_autocomplete)
     async def clear_late(self, interaction: discord.Interaction, selection: str):
+        """Delete one late request selected from autocomplete."""
         await interaction.response.defer(ephemeral=True)  # Defer first
 
         user_id = str(interaction.user.id)
@@ -223,6 +230,7 @@ class Lates(commands.Cog):
 
     @app_commands.command(name="my_lates", description="See all the meals you've requested lates for")
     async def my_lates(self, interaction: discord.Interaction):
+        """List every currently active late request owned by the caller."""
         await interaction.response.defer(ephemeral=True)  # Defer first
 
         user_id = str(interaction.user.id)
@@ -245,4 +253,5 @@ class Lates(commands.Cog):
 
 
 async def setup(bot):
+    """Register the lates cog with the bot."""
     await bot.add_cog(Lates(bot))

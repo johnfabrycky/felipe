@@ -2,7 +2,10 @@ import discord
 
 
 class SwapView(discord.ui.View):
+    """Interactive approval view for a proposed shift swap."""
+
     def __init__(self, proposer, target_id, p_data, t_data, supabase):
+        """Store swap participants, shift payloads, and the database client."""
         super().__init__(timeout=300)
         self.proposer = proposer
         self.target_id = str(target_id)
@@ -12,6 +15,7 @@ class SwapView(discord.ui.View):
 
     @discord.ui.button(label="Accept Swap", style=discord.ButtonStyle.green)
     async def accept(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Finalize the swap when the invited user accepts it."""
         # 1. Validation check
         if str(interaction.user.id) != self.target_id:
             return await interaction.response.send_message("Only the recipient can accept this.", ephemeral=True)
@@ -54,6 +58,7 @@ class SwapView(discord.ui.View):
 
     @discord.ui.button(label="Decline", style=discord.ButtonStyle.red)
     async def decline(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Reject the swap request and disable the action buttons."""
         if str(interaction.user.id) != self.target_id:
             return await interaction.response.send_message("Only the recipient can decline.", ephemeral=True)
 

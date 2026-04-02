@@ -9,7 +9,10 @@ local_tz = pytz.timezone('America/Chicago')
 
 
 class Movies(commands.Cog):
+    """Track ad-hoc movie sessions announced in Discord."""
+
     def __init__(self, bot):
+        """Initialize in-memory storage for active movie sessions."""
         self.bot = bot
         self.movie_sessions = {}
 
@@ -22,6 +25,7 @@ class Movies(commands.Cog):
     )
     async def watch(self, interaction: discord.Interaction, duration_mins: int, location: str, movie_name: str,
                     start_time: str = None):
+        """Record a movie session and announce where it is playing."""
         if start_time is None:
             start_dt = datetime.now(local_tz)
         else:
@@ -52,6 +56,7 @@ class Movies(commands.Cog):
 
     @app_commands.command(name="where", description="Check what movies are currently playing")
     async def where(self, interaction: discord.Interaction):
+        """List movie sessions that have not yet expired."""
         now = datetime.now(local_tz)
         active_movies = []
 
@@ -67,4 +72,5 @@ class Movies(commands.Cog):
 
 
 async def setup(bot):
+    """Register the movies cog with the bot."""
     await bot.add_cog(Movies(bot))

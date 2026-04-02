@@ -6,6 +6,8 @@ from discord.ext import commands
 
 
 class RandomPing(commands.Cog):
+    """Background task that posts short random pings to an allowed channel."""
+
     # note: dialogues will be kept anonymous until after 4/1
     # hint: there are three different movies/scenes from which the quotes are dervied from
 
@@ -37,12 +39,14 @@ class RandomPing(commands.Cog):
     TESTING_CHANNEL_ID = 1407462555974107277
 
     def __init__(self, bot):
+        """Store the bot reference and start the recurring ping loop."""
         self.bot = bot
         # The channel where the ping will actually be sent
         self.target_channel_id = self.TESTING_CHANNEL_ID
         self.ping_task = self.bot.loop.create_task(self.ping_loop())
 
     async def ping_loop(self):
+        """Sleep for a random interval, then ping an eligible member with a quote."""
         # Wait until the bot is fully ready and cached before starting
         await self.bot.wait_until_ready()
 
@@ -77,9 +81,11 @@ class RandomPing(commands.Cog):
                     )
 
     def cog_unload(self):
+        """Cancel the background ping task when the cog unloads."""
         # Ensure the background task is cancelled if the cog is ever unloaded
         self.ping_task.cancel()
 
 
 async def setup(bot):
+    """Register the random ping cog with the bot."""
     await bot.add_cog(RandomPing(bot))

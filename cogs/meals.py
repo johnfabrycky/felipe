@@ -9,7 +9,10 @@ local_tz = pytz.timezone('America/Chicago')
 
 
 class Meals(commands.Cog):
+    """Meal schedule commands backed by the bot's cached menu data."""
+
     def __init__(self, bot):
+        """Store the bot reference used to access cached meals."""
         self.bot = bot
 
     def get_meal_from_cache(self, week, day, meal_type):
@@ -27,6 +30,7 @@ class Meals(commands.Cog):
         return "No meal scheduled"
 
     def is_uiuc_break(self, current_date):
+        """Return the current academic break label, if one is configured."""
         # Spring Break 2026: March 14 to March 22
         spring_break_start = datetime(2026, 3, 14, tzinfo=local_tz)
         spring_break_end = datetime(2026, 3, 22, 23, 59, tzinfo=local_tz)
@@ -36,6 +40,7 @@ class Meals(commands.Cog):
 
     @app_commands.command(name="today", description="Get today's menu")
     async def today(self, interaction: discord.Interaction):
+        """Show the current day's lunch and dinner from the rotating meal schedule."""
         now = datetime.now(local_tz)
 
         # 1. Check for breaks
@@ -72,4 +77,5 @@ class Meals(commands.Cog):
 
 
 async def setup(bot):
+    """Register the meals cog with the bot."""
     await bot.add_cog(Meals(bot))

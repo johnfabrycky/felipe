@@ -26,7 +26,10 @@ INITIAL_EXTENSIONS = [
 
 # --- Bot Initialization ---
 class GeraldBot(commands.Bot):
+    """Main Discord bot class responsible for startup, sync, and shared caches."""
+
     def __init__(self):
+        """Configure intents, create shared clients, and initialize local caches."""
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
@@ -40,6 +43,7 @@ class GeraldBot(commands.Bot):
         self.meal_cache = []
 
     async def setup_hook(self):
+        """Load configured extensions and sync slash commands to the development guild."""
         # 1. Load Extensions
         for extension in INITIAL_EXTENSIONS:
             try:
@@ -54,6 +58,7 @@ class GeraldBot(commands.Bot):
         print(f"🌲 Tree synced to guild {GUILD_ID}")
 
     async def on_ready(self):
+        """Cache startup data, initialize parking, and publish bot presence."""
         # 3. Cache Initial Data
         # The 'state' is what actually shows up in the bubble
         await self.change_presence(
@@ -83,6 +88,7 @@ bot = GeraldBot()
 @bot.command()
 @commands.is_owner()
 async def sync_global(ctx):
+    """Sync global slash commands for production-style rollout."""
     await bot.tree.sync()
     await ctx.send("🌍 Global slash commands synced (may take 1 hour).")
 
@@ -90,6 +96,7 @@ async def sync_global(ctx):
 @bot.command()
 @commands.is_owner()
 async def clear_ghosts(ctx):
+    """Clear globally registered commands to remove stale slash-command entries."""
     # This tells Discord: "Delete every global command I ever made"
     bot.tree.clear_commands(guild=None)
     await bot.tree.sync()
@@ -99,6 +106,7 @@ async def clear_ghosts(ctx):
 # --- Help Command ---
 @bot.tree.command(name="help", description="List all available commands and bot info")
 async def help_command(interaction: discord.Interaction):
+    """Show a categorized summary of the bot's currently exposed commands."""
     embed = discord.Embed(
         title="🤖 Bot Command Center",
         description="I manage parking, late plates, meal schedules, and feedback!",
