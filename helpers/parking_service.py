@@ -8,12 +8,16 @@ from helpers.constants import LOCAL_TZ, STAFF_SPOTS, GUEST_SPOTS, VALID_SPOTS
 
 
 class ParkingService:
+    """Database-backed business logic for the parking system."""
+
     def __init__(self):
+        """Create the shared Supabase client used by parking commands."""
         url = os.environ.get("SUPABASE_URL")
         key = os.environ.get("SUPABASE_SERVICE_KEY")
         self.supabase = create_client(url, key)
 
     def parse_range(self, s_day_int, s_time_str, e_day_int, e_time_str):
+        """Convert weekday and hour choices into the next matching start/end datetimes."""
         now = datetime.now(LOCAL_TZ).replace(minute=0, second=0, microsecond=0)
 
         # 1. Map the integers back to the dateutil weekday objects
@@ -76,6 +80,7 @@ class ParkingService:
             print(f"⚠️ Service Error initializing spots: {e}")
 
     def is_blackout(self, start, end):
+        """Return whether any hour in the requested window falls inside staff blackout time."""
         curr = start
         while curr < end:
             d, h = curr.weekday(), curr.hour
@@ -126,6 +131,7 @@ class ParkingService:
             return False, f"❌ Database error: {e}"
 
     async def claim_resident_spot(self, user_id, spot, start, end):
+        """Reserve a guest spot or a resident spot covered by an existing offer."""
         conflict = self.supabase.table("parking_reservations").select("*").eq("spot_number", spot).lt("start_time",
                                                                                                       end.isoformat()).gt(
             "end_time", start.isoformat()).execute()
@@ -146,6 +152,7 @@ class ParkingService:
         return True, f"✅ **Spot {spot}** reserved!"
 
     async def claim_staff_spot(self, user_id, start, end):
+        """Assign the first free staff spot for a requested window."""
         if self.is_blackout(start, end): return False, "❌ Blackout hours active."
 
         conflicts = self.supabase.table("parking_reservations").select("spot_number").in_("spot_number",
@@ -164,6 +171,7 @@ class ParkingService:
         return True, f"✅ Staff Spot reserved ({start.strftime('%a %I%p')})."
 
     async def cancel_action(self, user_id, action_type, spot_num, weekday, start_h, end_h):
+        """Cancel matching recurring offers or reservations and return any affected user mentions."""
         now_iso = datetime.now(LOCAL_TZ).isoformat()
         if action_type == "offer":
             targets = self.supabase.table("parking_offers").select("*").eq("owner_id", str(user_id)).eq("spot_number",
@@ -224,9 +232,7 @@ class ParkingService:
             return "Error loading spots"
 
     def get_merged_availability(self, now, cutoff, raw_offers, raw_claims, is_guest=False):
-        """
-        Pure Logic: Consolidates offers, subtracts claims, and returns (header, blocks).
-        """
+        """Merge offer windows, subtract claims, and return a status header plus free blocks."""
         # 1. Merge Windows
         if is_guest:
             merged_windows = [{"start": now.replace(hour=0), "end": cutoff}]

@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import datetime, timedelta
 
 import discord
@@ -7,24 +8,27 @@ from discord.ext import commands
 from helpers.constants import WEEKDAYS, VALID_SPOTS, LOCAL_TZ, STAFF_SPOTS
 from helpers.parking_service import ParkingService
 
-from collections import Counter
-
 
 class Parking(commands.Cog):
+    """Slash commands for offering, claiming, and viewing parking availability."""
+
     day_choices = [app_commands.Choice(name=name, value=obj.weekday) for obj, name in WEEKDAYS]
     time_choices = [app_commands.Choice(name=f"{i % 12 or 12} {'AM' if i < 12 else 'PM'}",
                                         value=f"{i % 12 or 12} {'AM' if i < 12 else 'PM'}") for i in range(24)]
 
     def __init__(self, bot):
+        """Initialize the parking cog and its shared service layer."""
         self.bot = bot
         self.service = ParkingService()
 
     # Add this back to your Parking class in parking.py if you want to keep main.py as is:
     async def initialize_parking_spots(self):
+        """Ensure the configured parking spots exist in the backing database."""
         await self.service.initialize_spots()  # You'd need to create this in Service
 
     @app_commands.command(name="my_parking", description="View your active offers and reservations")
     async def my_parking(self, interaction: discord.Interaction):
+        """Show the caller's active offers and reservations in one ledger."""
         user_id = str(interaction.user.id)
         now = datetime.now(LOCAL_TZ)
 
@@ -73,6 +77,7 @@ class Parking(commands.Cog):
                          start_day: app_commands.Choice[int], start_time: app_commands.Choice[str],
                          end_day: app_commands.Choice[int], end_time: app_commands.Choice[str],
                          weeks: app_commands.Range[int, 1, 12] = 1):
+        """Offer a resident parking spot for a recurring weekly time window."""
         if spot not in VALID_SPOTS:
             return await interaction.response.send_message(f"❌ Spot {spot} is invalid.", ephemeral=True)
 
@@ -92,6 +97,7 @@ class Parking(commands.Cog):
     async def claim_spot(self, interaction: discord.Interaction, spot: int,
                          start_day: app_commands.Choice[int], start_time: app_commands.Choice[str],
                          end_day: app_commands.Choice[int], end_time: app_commands.Choice[str]):
+        """Reserve an offered resident spot or a designated guest spot."""
         if spot not in VALID_SPOTS: return await interaction.response.send_message("Invalid spot.", ephemeral=True)
         start, end, duration = self.service.parse_range(start_day.value, start_time.value, end_day.value,
                                                         end_time.value)
@@ -106,6 +112,7 @@ class Parking(commands.Cog):
     async def claim_staff(self, interaction: discord.Interaction,
                           start_day: app_commands.Choice[int], start_time: app_commands.Choice[str],
                           end_day: app_commands.Choice[int], end_time: app_commands.Choice[str]):
+        """Reserve one of the rotating staff spots if blackout rules allow it."""
         start, end, duration = self.service.parse_range(start_day.value, start_time.value, end_day.value,
                                                         end_time.value)
         success, msg = await self.service.claim_staff_spot(interaction.user.id, start, end)
@@ -113,6 +120,7 @@ class Parking(commands.Cog):
 
     @app_commands.command(name="parking_status", description="View available parking spots")
     async def parking_status(self, interaction: discord.Interaction):
+        """Summarize resident, guest, and staff parking availability for the next week."""
         # 1. Setup timeframes
         now = datetime.now(LOCAL_TZ).replace(minute=0, second=0, microsecond=0)
         cutoff = now + timedelta(days=7)
@@ -190,6 +198,7 @@ class Parking(commands.Cog):
 
     async def cancel_spot_autocomplete(self, interaction: discord.Interaction, current: str) -> list[
         app_commands.Choice[str]]:
+        """Build autocomplete options for the caller's cancellable offers and reservations."""
         user_id = str(interaction.user.id)
         choices = []
         now = datetime.now(LOCAL_TZ)
@@ -239,6 +248,7 @@ class Parking(commands.Cog):
     @app_commands.command(name="cancel", description="Cancel your reservations or withdraw offers")
     @app_commands.autocomplete(spot=cancel_spot_autocomplete)  # Link it here!
     async def cancel(self, interaction: discord.Interaction, spot: str):
+        """Cancel the selected recurring reservation or offered spot window."""
         if not spot.startswith("sig_"):
             return await interaction.response.send_message("❌ Please select an option from the list.", ephemeral=True)
 
@@ -255,6 +265,7 @@ class Parking(commands.Cog):
 
     @app_commands.command(name="parking_help", description="How to use the parking system")
     async def parking_help(self, interaction: discord.Interaction):
+        """Send an overview of parking commands, rules, and guest spot details."""
         # 1. Fetch formatted guest list string from the Service
         guest_list_str = await self.service.get_guest_spot_list()
 
@@ -306,6 +317,6 @@ class Parking(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-
 async def setup(bot):
+    """Register the parking cog with the bot."""
     await bot.add_cog(Parking(bot))

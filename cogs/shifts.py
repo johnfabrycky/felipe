@@ -9,7 +9,10 @@ from helpers.swapview import SwapView
 
 
 class Shifts(commands.Cog):
+    """Marketplace and swap commands for house shifts."""
+
     def __init__(self, bot):
+        """Initialize the cog and connect to the shifts database."""
         self.bot = bot
         url = os.environ.get("SUPABASE_URL")
         key = os.environ.get("SUPABASE_SERVICE_KEY")
@@ -20,6 +23,7 @@ class Shifts(commands.Cog):
 
     # --- AUTOCOMPLETE LOGIC ---
     async def shift_autocomplete(self, interaction: discord.Interaction, current: str):
+        """Return claimable market listings that match the user's current search text."""
         # Fetch shifts that haven't been claimed yet
         response = (self.supabase.table("shifts")
                     .select("*")
@@ -40,6 +44,7 @@ class Shifts(commands.Cog):
         return choices[:25]
 
     async def target_user_autocomplete(self, interaction: discord.Interaction, current: str):
+        """Suggest users who currently own at least one shift available for trading."""
         user_id = str(interaction.user.id)
 
         # 1. Fetch all shifts that are either claimed by someone or offered by a seller
@@ -81,6 +86,7 @@ class Shifts(commands.Cog):
         day=[app_commands.Choice(name=d, value=d) for d in DAYS]
     )
     async def offer(self, interaction: discord.Interaction, shift_type: str, day: str, price: float):
+        """Post a shift for sale or relist a shift the caller previously claimed."""
         user_id = str(interaction.user.id)
 
         # Check if you currently hold this shift as a CLAIM
@@ -117,6 +123,7 @@ class Shifts(commands.Cog):
 
     # 1. Autocomplete for shifts the Proposer CURRENTLY OWNS
     async def my_owned_shifts_autocomplete(self, interaction: discord.Interaction, current: str):
+        """Return unclaimed shifts currently owned by the caller."""
         user_id = str(interaction.user.id)
         # Finds shifts where you are the current owner or original seller (if unclaimed)
         response = (self.supabase.table("shifts")
@@ -132,6 +139,7 @@ class Shifts(commands.Cog):
 
     # 2. Autocomplete for shifts the TARGET USER currently owns
     async def target_shifts_autocomplete(self, interaction: discord.Interaction, current: str):
+        """Return unclaimed shifts currently owned by the selected trade target."""
         # 1. Grab the target from the namespace
         target = interaction.namespace.target_user
 
@@ -164,6 +172,7 @@ class Shifts(commands.Cog):
                                their_shift=target_shifts_autocomplete)
     async def swap(self, interaction: discord.Interaction, target_user: str, my_shift: str,
                    their_shift: str):
+        """Propose a one-for-one shift swap to another user."""
         # 1. Validation Guard: Check if inputs are actually numeric IDs
         if not (my_shift.isdigit() and their_shift.isdigit()):
             return await interaction.response.send_message(
@@ -215,6 +224,7 @@ class Shifts(commands.Cog):
 
     @app_commands.command(name="view_market", description="See all available shifts for hire")
     async def view_market(self, interaction: discord.Interaction):
+        """Display every unclaimed shift currently available on the market."""
         # 1. Immediately tell Discord to wait (gives you more than 3 seconds)
         await interaction.response.defer(ephemeral=True)
 
@@ -245,6 +255,7 @@ class Shifts(commands.Cog):
     @app_commands.command(name="claim_shift", description="Take a shift from the market")
     @app_commands.autocomplete(shift=shift_autocomplete)
     async def claim(self, interaction: discord.Interaction, shift: str):
+        """Claim an available shift listing from the market."""
         # 1. Fetch the data using the 'shift' string (which is the ID)
         response = self.supabase.table("shifts").select("*").eq("id", int(shift)).execute()
 
@@ -272,6 +283,7 @@ class Shifts(commands.Cog):
 
     @app_commands.command(name="my_shifts", description="View your offers and claims")
     async def my_shifts(self, interaction: discord.Interaction):
+        """Show the caller's active shift offers and claimed shifts."""
         user_id = str(interaction.user.id)
 
         # Offers: Where you are the seller and nobody has taken it yet
@@ -293,6 +305,7 @@ class Shifts(commands.Cog):
 
     # Autocomplete for shifts the user has posted but are not yet claimed
     async def cancel_autocomplete(self, interaction: discord.Interaction, current: str):
+        """Return the caller's active market listings for cancellation autocomplete."""
         response = self.supabase.table("shifts").select("*") \
             .eq("seller_id", str(interaction.user.id)) \
             .is_("claimed_by_id", "null") \
@@ -309,6 +322,7 @@ class Shifts(commands.Cog):
     @app_commands.command(name="cancel_shift", description="Remove one of your shift offers from the market")
     @app_commands.autocomplete(shift=cancel_autocomplete)
     async def cancel(self, interaction: discord.Interaction, shift: str):
+        """Delete one of the caller's unclaimed shift listings."""
         # We use 'shift' as the ID string to keep your preferred UI label
 
         # 1. Attempt to delete. We add the seller_id check as a security layer.
@@ -333,4 +347,5 @@ class Shifts(commands.Cog):
 
 
 async def setup(bot):
+    """Register the shifts cog with the bot."""
     await bot.add_cog(Shifts(bot))

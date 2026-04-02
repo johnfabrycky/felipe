@@ -15,7 +15,10 @@ supabase = create_client(url, key)
 # args: string table_name:      name of the SQL table
 #       string transform_func:  function used to transform the CSV file into proper SQL format
 class TableSchema:
+    """Describe how a CSV file should be transformed and inserted into a table."""
+
     def __init__(self, table_name, transform_func):
+        """Store the destination table name and row transformation callback."""
         self.table_name = table_name
         self.transform_func = transform_func
 
@@ -24,6 +27,7 @@ class TableSchema:
 #       string file_path    opened and read for uploading to supabase
 # returns:  void            prints appropriate success or error message
 def upload_from_csv(file_path, schema: TableSchema):
+    """Read a CSV file, transform its rows, and insert the results into Supabase."""
     data_to_insert = []
 
     try:
@@ -47,6 +51,7 @@ def upload_from_csv(file_path, schema: TableSchema):
 # args: csv_reader  which has already opened the csv file and is parsing it
 # returns:  rows    the rows which are the parsed csv file, ready to be inserted to the supabase tables
 def transform_meals(csv_reader):
+    """Convert the meal schedule CSV into normalized meal records for Supabase."""
     rows = []
     meal_id = 0
     for parts in csv_reader:
