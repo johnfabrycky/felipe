@@ -230,7 +230,7 @@ class ParkingService:
                 self.supabase.table("parking_offers")
                 .select("*")
                 .eq("owner_id", str(user_id))
-                .eq("id", record_id)
+                .eq("id", str(record_id))
                 .gt("end_time", now_iso)
                 .execute()
             )
@@ -238,9 +238,9 @@ class ParkingService:
                 return False, "No matching offers.", None
 
             offer = target.data[0]
-            claims = self.supabase.table("parking_reservations").select("claimer_id").eq("offer_id", record_id).execute()
-            self.supabase.table("parking_reservations").delete().eq("offer_id", record_id).execute()
-            self.supabase.table("parking_offers").delete().eq("id", record_id).execute()
+            claims = self.supabase.table("parking_reservations").select("claimer_id").eq("offer_id", str(record_id)).execute()
+            self.supabase.table("parking_reservations").delete().eq("offer_id", str(record_id)).execute()
+            self.supabase.table("parking_offers").delete().eq("id", str(record_id)).execute()
             pings = list({f"<@{c['claimer_id']}>" for c in claims.data})
             return True, f"🔄 Spot {offer['spot_number']} offer withdrawn.", pings
 
@@ -248,7 +248,7 @@ class ParkingService:
             self.supabase.table("parking_reservations")
             .select("*")
             .eq("claimer_id", str(user_id))
-            .eq("id", record_id)
+            .eq("id", str(record_id))
             .gt("end_time", now_iso)
             .execute()
         )
@@ -256,7 +256,7 @@ class ParkingService:
             return False, "No matching claims.", None
 
         reservation = target.data[0]
-        self.supabase.table("parking_reservations").delete().eq("id", record_id).execute()
+        self.supabase.table("parking_reservations").delete().eq("id", str(record_id)).execute()
         return True, f"🔄 Reservation for Spot {reservation['spot_number']} cancelled.", None
 
     async def get_user_activity(self, user_id):

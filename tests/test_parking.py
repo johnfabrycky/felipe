@@ -188,7 +188,7 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         interaction = make_interaction()
         self.service.cancel_action.return_value = (True, "withdrawn", ["<@1>", "<@2>"])
 
-        await parking_module.Parking.cancel.callback(self.cog, interaction, "sig_offer_10")
+        await parking_module.Parking.cancel.callback(self.cog, interaction, "sig_offer_test-id")
 
         interaction.response.defer.assert_awaited_once_with(ephemeral=True)
         interaction.channel.send.assert_awaited_once_with("⚠️ **Attention <@1>, <@2>**: withdrawn")
@@ -346,21 +346,21 @@ class ParkingServiceTests(unittest.TestCase):
         store = {
             "parking_offers": [
                 {
-                    "id": 1,
+                    "id": "offer-1",
                     "spot_number": 27,
                     "owner_id": "1234",
                     "start_time": "2026-04-02T16:00:00-05:00",
                     "end_time": "2026-04-05T12:00:00-05:00",
                 },
                 {
-                    "id": 2,
+                    "id": "offer-2",
                     "spot_number": 27,
                     "owner_id": "1234",
                     "start_time": "2026-04-02T18:00:00-05:00",
                     "end_time": "2026-04-05T12:00:00-05:00",
                 },
                 {
-                    "id": 3,
+                    "id": "offer-3",
                     "spot_number": 27,
                     "owner_id": "1234",
                     "start_time": "2026-04-09T16:00:00-05:00",
@@ -373,9 +373,9 @@ class ParkingServiceTests(unittest.TestCase):
         service = ParkingService()
         service.supabase = FakeSupabase(store)
 
-        success, _message, pings = asyncio.run(service.cancel_action(1234, "offer", 1))
+        success, _message, pings = asyncio.run(service.cancel_action(1234, "offer", "offer-1"))
 
         self.assertTrue(success)
         self.assertEqual(pings, [])
         remaining_ids = [row["id"] for row in store["parking_offers"]]
-        self.assertEqual(remaining_ids, [2, 3])
+        self.assertEqual(remaining_ids, ["offer-2", "offer-3"])

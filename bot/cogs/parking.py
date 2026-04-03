@@ -254,8 +254,8 @@ class Parking(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
 
-        _, action_type, record_id = spot.split("_")
-        success, msg, pings = await self.service.cancel_action(interaction.user.id, action_type, int(record_id))
+        _, action_type, record_id = spot.split("_", 2)
+        success, msg, pings = await self.service.cancel_action(interaction.user.id, action_type, record_id)
 
         if pings:
             try:
