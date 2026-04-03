@@ -148,14 +148,15 @@ class Parking(commands.Cog):
 
     @app_commands.command(name="claim_spot", description="Reserve a resident or guest spot")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
+    @app_commands.autocomplete(spot=claim_spot_autocomplete)
     async def claim_spot(
             self,
             interaction: discord.Interaction,
-            spot: int,
             start_day: app_commands.Choice[int],
             start_time: app_commands.Choice[str],
             end_day: app_commands.Choice[int],
             end_time: app_commands.Choice[str],
+            spot: int,
     ):
         """Reserve an offered resident spot or a designated guest spot."""
         if spot not in VALID_SPOTS:
