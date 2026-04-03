@@ -221,49 +221,43 @@ class ParkingService:
         ).execute()
         return True, f"✅ Staff Spot reserved ({start.strftime('%a %I%p')})."
 
-    async def cancel_action(self, user_id, action_type, spot_num, weekday, start_h, end_h):
-        """Cancel matching recurring offers or reservations and return any affected user mentions."""
+    async def cancel_action(self, user_id, action_type, record_id):
+        """Cancel one selected offer or reservation and return any affected user mentions."""
         now_iso = datetime.now(LOCAL_TZ).isoformat()
+
         if action_type == "offer":
-            targets = (
+            target = (
                 self.supabase.table("parking_offers")
                 .select("*")
                 .eq("owner_id", str(user_id))
-                .eq("spot_number", spot_num)
+                .eq("id", record_id)
                 .gt("end_time", now_iso)
                 .execute()
             )
-            ids = [
-                r["id"]
-                for r in targets.data
-                if datetime.fromisoformat(r["start_time"]).astimezone(LOCAL_TZ).weekday() == weekday
-            ]
-            if not ids:
+            if not target.data:
                 return False, "No matching offers.", None
 
-            claims = self.supabase.table("parking_reservations").select("claimer_id").in_("offer_id", ids).execute()
-            self.supabase.table("parking_reservations").delete().in_("offer_id", ids).execute()
-            self.supabase.table("parking_offers").delete().in_("id", ids).execute()
+            offer = target.data[0]
+            claims = self.supabase.table("parking_reservations").select("claimer_id").eq("offer_id", record_id).execute()
+            self.supabase.table("parking_reservations").delete().eq("offer_id", record_id).execute()
+            self.supabase.table("parking_offers").delete().eq("id", record_id).execute()
             pings = list({f"<@{c['claimer_id']}>" for c in claims.data})
-            return True, f"🔄 Spot {spot_num} offers withdrawn.", pings
+            return True, f"🔄 Spot {offer['spot_number']} offer withdrawn.", pings
 
-        targets = (
+        target = (
             self.supabase.table("parking_reservations")
             .select("*")
             .eq("claimer_id", str(user_id))
-            .eq("spot_number", spot_num)
+            .eq("id", record_id)
             .gt("end_time", now_iso)
             .execute()
         )
-        ids = [
-            r["id"]
-            for r in targets.data
-            if datetime.fromisoformat(r["start_time"]).astimezone(LOCAL_TZ).weekday() == weekday
-        ]
-        if not ids:
+        if not target.data:
             return False, "No matching claims.", None
-        self.supabase.table("parking_reservations").delete().in_("id", ids).execute()
-        return True, f"🔄 Reservation for Spot {spot_num} cancelled.", None
+
+        reservation = target.data[0]
+        self.supabase.table("parking_reservations").delete().eq("id", record_id).execute()
+        return True, f"🔄 Reservation for Spot {reservation['spot_number']} cancelled.", None
 
     async def get_user_activity(self, user_id):
         """Fetch active offers and reservations for a specific user."""
@@ -276,7 +270,6 @@ class ParkingService:
             .gt("end_time", now_iso)
             .execute()
         )
-
         claims = (
             self.supabase.table("parking_reservations")
             .select("*")
@@ -284,7 +277,6 @@ class ParkingService:
             .gt("end_time", now_iso)
             .execute()
         )
-
         return offers.data, claims.data
 
     async def get_guest_spot_list(self) -> str:
