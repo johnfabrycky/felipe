@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from datetime import datetime, timedelta
 from types import SimpleNamespace
@@ -185,7 +186,7 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         interaction = make_interaction()
         self.service.cancel_action.return_value = (True, "withdrawn", ["<@1>", "<@2>"])
 
-        await parking_module.Parking.cancel.callback(self.cog, interaction, "sig_offer_10_0_13_15")
+        await parking_module.Parking.cancel.callback(self.cog, interaction, "sig_offer_10")
 
         interaction.channel.send.assert_awaited_once_with("⚠️ **Attention <@1>, <@2>**: withdrawn")
         interaction.response.send_message.assert_awaited_once_with("withdrawn", ephemeral=True)
@@ -203,14 +204,14 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ParkingServiceTests(unittest.TestCase):
-    """Unit tests for parking service time parsing."""
+    """Unit tests for parking service time parsing and cancellation behavior."""
 
     @patch("bot.services.parking_service.create_client")
     @patch("bot.services.parking_service.datetime")
     def test_parse_range_treats_current_hour_as_this_week(
-            self,
-            datetime_mock,
-            create_client_mock,
+        self,
+        datetime_mock,
+        create_client_mock,
     ):
         create_client_mock.return_value = MagicMock()
         real_datetime = datetime
@@ -221,7 +222,6 @@ class ParkingServiceTests(unittest.TestCase):
         service = ParkingService()
 
         this_week_start, this_week_end, _ = service.parse_range(3, "4 PM", 6, "12 PM")
-        next_week_start, next_week_end, _ = service.parse_range(3, "3 PM", 6, "12 PM")
 
         self.assertEqual(this_week_start, real_datetime(2026, 4, 2, 16, 0, tzinfo=parking_module.LOCAL_TZ))
         self.assertEqual(this_week_end, real_datetime(2026, 4, 5, 12, 0, tzinfo=parking_module.LOCAL_TZ))
@@ -229,9 +229,9 @@ class ParkingServiceTests(unittest.TestCase):
     @patch("bot.services.parking_service.create_client")
     @patch("bot.services.parking_service.datetime")
     def test_parse_range_treats_earlier_hour_as_next_week(
-            self,
-            datetime_mock,
-            create_client_mock,
+        self,
+        datetime_mock,
+        create_client_mock,
     ):
         create_client_mock.return_value = MagicMock()
         real_datetime = datetime
@@ -241,7 +241,6 @@ class ParkingServiceTests(unittest.TestCase):
 
         service = ParkingService()
 
-        this_week_start, this_week_end, _ = service.parse_range(3, "4 PM", 6, "12 PM")
         next_week_start, next_week_end, _ = service.parse_range(3, "3 PM", 6, "12 PM")
 
         self.assertEqual(next_week_start, real_datetime(2026, 4, 9, 15, 0, tzinfo=parking_module.LOCAL_TZ))
@@ -264,8 +263,6 @@ class ParkingServiceTests(unittest.TestCase):
         start = datetime(2026, 4, 2, 16, 0, tzinfo=parking_module.LOCAL_TZ)
         end = datetime(2026, 4, 5, 12, 0, tzinfo=parking_module.LOCAL_TZ)
 
-        import asyncio
-
         success, message = asyncio.run(service.create_offers(1234, 27, start, end, 1))
 
         self.assertTrue(success)
@@ -273,3 +270,109 @@ class ParkingServiceTests(unittest.TestCase):
             message,
             "📢 **Spot 27** listed\nStart: Thu Apr 2 at 4:00 PM\nEnd: Sun Apr 5 at 12:00 PM",
         )
+
+    @patch("bot.services.parking_service.create_client")
+    @patch("bot.services.parking_service.datetime")
+    def test_cancel_action_removes_only_selected_offer_window(self, datetime_mock, create_client_mock):
+        create_client_mock.return_value = MagicMock()
+        real_datetime = datetime
+        current_time = real_datetime(2026, 4, 1, 12, 0, tzinfo=parking_module.LOCAL_TZ)
+        datetime_mock.now.return_value = current_time
+        datetime_mock.strptime.side_effect = lambda *args, **kwargs: real_datetime.strptime(*args, **kwargs)
+        datetime_mock.fromisoformat.side_effect = lambda *args, **kwargs: real_datetime.fromisoformat(*args, **kwargs)
+
+        class FakeResponse:
+            def __init__(self, data):
+                self.data = data
+
+        class FakeTable:
+            def __init__(self, name, store):
+                self.name = name
+                self.store = store
+                self.mode = "select"
+                self.filters = []
+                self.in_filters = []
+
+            def select(self, *_args):
+                self.mode = "select"
+                return self
+
+            def delete(self):
+                self.mode = "delete"
+                return self
+
+            def eq(self, field, value):
+                self.filters.append((field, value))
+                return self
+
+            def gt(self, field, value):
+                self.filters.append((field, ("gt", value)))
+                return self
+
+            def in_(self, field, values):
+                self.in_filters.append((field, set(values)))
+                return self
+
+            def execute(self):
+                rows = list(self.store[self.name])
+                for field, value in self.filters:
+                    if isinstance(value, tuple) and value[0] == "gt":
+                        rows = [row for row in rows if row[field] > value[1]]
+                    else:
+                        rows = [row for row in rows if row[field] == value]
+                for field, values in self.in_filters:
+                    rows = [row for row in rows if row[field] in values]
+
+                if self.mode == "delete":
+                    ids_to_remove = {row["id"] for row in rows}
+                    self.store[self.name] = [row for row in self.store[self.name] if row["id"] not in ids_to_remove]
+
+                response = FakeResponse(rows)
+                self.mode = "select"
+                self.filters = []
+                self.in_filters = []
+                return response
+
+        class FakeSupabase:
+            def __init__(self, store):
+                self.store = store
+
+            def table(self, name):
+                return FakeTable(name, self.store)
+
+        store = {
+            "parking_offers": [
+                {
+                    "id": 1,
+                    "spot_number": 27,
+                    "owner_id": "1234",
+                    "start_time": "2026-04-02T16:00:00-05:00",
+                    "end_time": "2026-04-05T12:00:00-05:00",
+                },
+                {
+                    "id": 2,
+                    "spot_number": 27,
+                    "owner_id": "1234",
+                    "start_time": "2026-04-02T18:00:00-05:00",
+                    "end_time": "2026-04-05T12:00:00-05:00",
+                },
+                {
+                    "id": 3,
+                    "spot_number": 27,
+                    "owner_id": "1234",
+                    "start_time": "2026-04-09T16:00:00-05:00",
+                    "end_time": "2026-04-12T12:00:00-05:00",
+                },
+            ],
+            "parking_reservations": [],
+        }
+
+        service = ParkingService()
+        service.supabase = FakeSupabase(store)
+
+        success, _message, pings = asyncio.run(service.cancel_action(1234, "offer", 1))
+
+        self.assertTrue(success)
+        self.assertEqual(pings, [])
+        remaining_ids = [row["id"] for row in store["parking_offers"]]
+        self.assertEqual(remaining_ids, [2, 3])
