@@ -16,8 +16,10 @@ def make_interaction(user_id=1234):
     return SimpleNamespace(
         user=user,
         response=SimpleNamespace(
+            defer=AsyncMock(),
             send_message=AsyncMock(),
         ),
+        followup=SimpleNamespace(send=AsyncMock()),
         channel=SimpleNamespace(send=AsyncMock()),
     )
 
@@ -188,8 +190,9 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
 
         await parking_module.Parking.cancel.callback(self.cog, interaction, "sig_offer_10")
 
+        interaction.response.defer.assert_awaited_once_with(ephemeral=True)
         interaction.channel.send.assert_awaited_once_with("⚠️ **Attention <@1>, <@2>**: withdrawn")
-        interaction.response.send_message.assert_awaited_once_with("withdrawn", ephemeral=True)
+        interaction.followup.send.assert_awaited_once_with("withdrawn", ephemeral=True)
 
     async def test_parking_help_sends_guide_embed(self):
         interaction = make_interaction()
