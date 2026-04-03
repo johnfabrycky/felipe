@@ -252,13 +252,18 @@ class Parking(commands.Cog):
         if not spot.startswith("sig_"):
             return await interaction.response.send_message("❌ Please select an option from the list.", ephemeral=True)
 
+        await interaction.response.defer(ephemeral=True)
+
         _, action_type, record_id = spot.split("_")
         success, msg, pings = await self.service.cancel_action(interaction.user.id, action_type, int(record_id))
 
         if pings:
-            await interaction.channel.send(f"⚠️ **Attention {', '.join(pings)}**: {msg}")
+            try:
+                await interaction.channel.send(f"⚠️ **Attention {', '.join(pings)}**: {msg}")
+            except Exception as e:
+                print(f"Parking cancel ping failed: {e}")
 
-        await interaction.response.send_message(msg, ephemeral=True)
+        await interaction.followup.send(msg, ephemeral=True)
 
     @app_commands.command(name="parking_help", description="How to use the parking system")
     async def parking_help(self, interaction: discord.Interaction):
