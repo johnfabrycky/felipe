@@ -51,7 +51,8 @@ class LatesCogTests(unittest.IsolatedAsyncioTestCase):
         self.supabase_patch = patch.object(lates_module, "supabase", self.supabase)
         self.supabase_patch.start()
         self.addCleanup(self.supabase_patch.stop)
-        self.run_patch = patch("bot.cogs.lates.run_supabase", new=AsyncMock(side_effect=lambda query, timeout=10: query.execute()))
+        self.run_patch = patch("bot.cogs.lates.run_supabase",
+                               new=AsyncMock(side_effect=lambda query, timeout=10: query.execute()))
         self.mock_run = self.run_patch.start()
         self.addCleanup(self.run_patch.stop)
         self.cog = lates_module.Lates(bot=object())

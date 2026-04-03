@@ -93,7 +93,8 @@ class Lates(commands.Cog):
 
     @app_commands.command(name="view_lates", description="See lates for your house")
     @app_commands.choices(
-        day=[app_commands.Choice(name=day, value=day) for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]],
+        day=[app_commands.Choice(name=day, value=day) for day in
+             ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]],
         meal=[app_commands.Choice(name="Lunch", value="Lunch"), app_commands.Choice(name="Dinner", value="Dinner")],
     )
     async def view_lates(self, interaction: discord.Interaction, day: str, meal: str):
@@ -130,9 +131,11 @@ class Lates(commands.Cog):
 
     @app_commands.command(name="late_me", description="Request food to be set aside")
     @app_commands.choices(
-        day=[app_commands.Choice(name=day, value=day) for day in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]],
+        day=[app_commands.Choice(name=day, value=day) for day in
+             ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]],
         meal=[app_commands.Choice(name="Lunch", value="Lunch"), app_commands.Choice(name="Dinner", value="Dinner")],
-        duration=[app_commands.Choice(name="Permanent", value="True"), app_commands.Choice(name="Temporary", value="False")],
+        duration=[app_commands.Choice(name="Permanent", value="True"),
+                  app_commands.Choice(name="Temporary", value="False")],
     )
     async def late_me(self, interaction: discord.Interaction, day: str, meal: str, duration: str):
         """Create a temporary or permanent late request for the caller."""
@@ -163,9 +166,9 @@ class Lates(commands.Cog):
         await interaction.followup.send(f"✅ Late recorded for **{day} {meal}** ({house.capitalize()}).", ephemeral=True)
 
     async def late_days_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
+            self,
+            interaction: discord.Interaction,
+            current: str,
     ) -> list[app_commands.Choice[str]]:
         """Return the caller's existing lates as autocomplete choices."""
         user_id = str(interaction.user.id)

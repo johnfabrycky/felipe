@@ -64,27 +64,29 @@ class Parking(commands.Cog):
             claim_groups[time_key] += 1
 
         claim_lines = [f"{key} (x{count})" if count > 1 else key for key, count in claim_groups.items()]
-        embed.add_field(name="📥 My Reservations", value="\n".join(claim_lines) or "No active reservations.", inline=False)
+        embed.add_field(name="📥 My Reservations", value="\n".join(claim_lines) or "No active reservations.",
+                        inline=False)
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @app_commands.command(name="offer_spot", description="List your spot as available")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def offer_spot(
-        self,
-        interaction: discord.Interaction,
-        spot: int,
-        start_day: app_commands.Choice[int],
-        start_time: app_commands.Choice[str],
-        end_day: app_commands.Choice[int],
-        end_time: app_commands.Choice[str],
-        weeks: app_commands.Range[int, 1, 12] = 1,
+            self,
+            interaction: discord.Interaction,
+            spot: int,
+            start_day: app_commands.Choice[int],
+            start_time: app_commands.Choice[str],
+            end_day: app_commands.Choice[int],
+            end_time: app_commands.Choice[str],
+            weeks: app_commands.Range[int, 1, 12] = 1,
     ):
         """Offer a resident parking spot for a recurring weekly time window."""
         if spot not in VALID_SPOTS:
             return await interaction.response.send_message(f"❌ Spot {spot} is invalid.", ephemeral=True)
 
-        start, end, duration = self.service.parse_range(start_day.value, start_time.value, end_day.value, end_time.value)
+        start, end, duration = self.service.parse_range(start_day.value, start_time.value, end_day.value,
+                                                        end_time.value)
         if duration < timedelta(hours=2):
             return await interaction.response.send_message("❌ Offers must be at least 2 hours.", ephemeral=True)
 
@@ -95,19 +97,20 @@ class Parking(commands.Cog):
     @app_commands.command(name="claim_spot", description="Reserve a resident or guest spot")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def claim_spot(
-        self,
-        interaction: discord.Interaction,
-        spot: int,
-        start_day: app_commands.Choice[int],
-        start_time: app_commands.Choice[str],
-        end_day: app_commands.Choice[int],
-        end_time: app_commands.Choice[str],
+            self,
+            interaction: discord.Interaction,
+            spot: int,
+            start_day: app_commands.Choice[int],
+            start_time: app_commands.Choice[str],
+            end_day: app_commands.Choice[int],
+            end_time: app_commands.Choice[str],
     ):
         """Reserve an offered resident spot or a designated guest spot."""
         if spot not in VALID_SPOTS:
             return await interaction.response.send_message("Invalid spot.", ephemeral=True)
 
-        start, end, duration = self.service.parse_range(start_day.value, start_time.value, end_day.value, end_time.value)
+        start, end, duration = self.service.parse_range(start_day.value, start_time.value, end_day.value,
+                                                        end_time.value)
         if duration < timedelta(hours=2) or duration > timedelta(days=7):
             return await interaction.response.send_message("❌ Must be between 2h and 7d.", ephemeral=True)
 
@@ -118,15 +121,16 @@ class Parking(commands.Cog):
     @app_commands.command(name="claim_staff", description="Reserve a staff spot")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
     async def claim_staff(
-        self,
-        interaction: discord.Interaction,
-        start_day: app_commands.Choice[int],
-        start_time: app_commands.Choice[str],
-        end_day: app_commands.Choice[int],
-        end_time: app_commands.Choice[str],
+            self,
+            interaction: discord.Interaction,
+            start_day: app_commands.Choice[int],
+            start_time: app_commands.Choice[str],
+            end_day: app_commands.Choice[int],
+            end_time: app_commands.Choice[str],
     ):
         """Reserve one of the rotating staff spots if blackout rules allow it."""
-        start, end, _duration = self.service.parse_range(start_day.value, start_time.value, end_day.value, end_time.value)
+        start, end, _duration = self.service.parse_range(start_day.value, start_time.value, end_day.value,
+                                                         end_time.value)
         await interaction.response.defer(ephemeral=True)
         success, msg = await self.service.claim_staff_spot(interaction.user.id, start, end)
         await interaction.followup.send(msg, ephemeral=not success)
@@ -202,9 +206,9 @@ class Parking(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     async def cancel_spot_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
+            self,
+            interaction: discord.Interaction,
+            current: str,
     ) -> list[app_commands.Choice[str]]:
         """Build autocomplete options for the caller's cancellable offers and reservations."""
         user_id = str(interaction.user.id)

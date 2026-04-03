@@ -94,7 +94,8 @@ class ParkingService:
     async def initialize_spots(self):
         """Synchronize the database parking spot table with the configured constants."""
         try:
-            await self._run_blocking(self._initialize_spots_sync, timeout=20, log_context={"operation": "initialize_spots"})
+            await self._run_blocking(self._initialize_spots_sync, timeout=20,
+                                     log_context={"operation": "initialize_spots"})
         except Exception:
             logger.exception("Parking spot initialization failed")
 
@@ -296,7 +297,8 @@ class ParkingService:
                 return False, "No matching offers.", None
 
             offer = target.data[0]
-            claims = self.supabase.table("parking_reservations").select("claimer_id").eq("offer_id", str(record_id)).execute()
+            claims = self.supabase.table("parking_reservations").select("claimer_id").eq("offer_id",
+                                                                                         str(record_id)).execute()
             self.supabase.table("parking_reservations").delete().eq("offer_id", str(record_id)).execute()
             self.supabase.table("parking_offers").delete().eq("id", str(record_id)).execute()
             pings = list({f"<@{c['claimer_id']}>" for c in claims.data})
@@ -329,7 +331,8 @@ class ParkingService:
             action_type,
             record_id,
             timeout=15,
-            log_context={"operation": "cancel_action", "user_id": str(user_id), "action_type": action_type, "record_id": str(record_id)},
+            log_context={"operation": "cancel_action", "user_id": str(user_id), "action_type": action_type,
+                         "record_id": str(record_id)},
         )
 
     def _get_user_activity_sync(self, user_id):
