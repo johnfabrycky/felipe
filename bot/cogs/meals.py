@@ -46,6 +46,7 @@ class Meals(commands.Cog):
         return ((max(0, days_since_start) // 7) % MEAL_CALENDAR.rotation_length_weeks) + 1
 
     @app_commands.command(name="today", description="Get today's menu")
+    @app_commands.checks.cooldown(1, 5.0, key=lambda interaction: interaction.user.id)
     async def today(self, interaction: discord.Interaction):
         """Show the current day's lunch and dinner from the rotating meal schedule."""
         now = datetime.now(LOCAL_TZ)

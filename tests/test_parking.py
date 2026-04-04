@@ -255,7 +255,7 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         interaction.followup.send.assert_awaited_once()
         embed = interaction.followup.send.await_args.kwargs["embed"]
         self.assertIsInstance(embed, discord.Embed)
-        self.assertEqual(embed.title, "🚗 Parking Status (Next 7 Days)")
+        self.assertEqual(embed.title, "Parking Status (Next 7 Days)")
         self.assertIn("Spot 10", embed.fields[0].value)
         self.assertIn("Spot 46", embed.fields[0].value)
         self.assertIn("Free", embed.fields[1].value)
