@@ -33,22 +33,32 @@ class Bot(commands.Bot):
         key = os.environ.get("SUPABASE_SERVICE_KEY")
         self.supabase = create_client(url, key)
         self.meal_cache = []
+        self.sync_on_startup = os.environ.get("SYNC_ON_STARTUP", "").lower() == "true"
+        self._ready_once = False
 
     async def setup_hook(self):
         """Load configured extensions and sync slash commands to the development guild."""
         for extension in INITIAL_EXTENSIONS:
             try:
                 await self.load_extension(extension)
-                print(f"✅ Loaded {extension}")
+                print(f"Loaded {extension}")
             except Exception as e:
-                print(f"❌ Failed to load {extension}: {e}")
+                print(f"Failed to load {extension}: {e}")
 
-        self.tree.copy_global_to(guild=MY_GUILD)
-        await self.tree.sync(guild=MY_GUILD)
-        print(f"🌲 Tree synced to guild {GUILD_ID}")
+        if self.sync_on_startup:
+            self.tree.copy_global_to(guild=MY_GUILD)
+            await self.tree.sync(guild=MY_GUILD)
+            print(f"Tree synced to guild {GUILD_ID}")
+        else:
+            print("Skipping slash-command sync on startup")
 
     async def on_ready(self):
         """Cache startup data, initialize parking, and publish bot presence."""
+        if self._ready_once:
+            print(f"Reconnected as {self.user.name}")
+            return
+
+        self._ready_once = True
         await self.change_presence(
             activity=discord.CustomActivity(name="Custom Status", state="Enter /help to see what I can do!")
         )
@@ -56,16 +66,16 @@ class Bot(commands.Bot):
         try:
             response = self.supabase.table("meals").select("*").execute()
             self.meal_cache = response.data
-            print(f"✅ Cached {len(self.meal_cache)} meals")
+            print(f"Cached {len(self.meal_cache)} meals")
         except Exception as e:
-            print(f"❌ Failed to cache meals: {e}")
+            print(f"Failed to cache meals: {e}")
 
         parking_cog = self.get_cog("Parking")
         if parking_cog:
             await parking_cog.initialize_parking_spots()
-            print("✅ Parking spots initialized")
+            print("Parking spots initialized")
 
-        print(f"🚀 {self.user.name} is online in Champaign!")
+        print(f"{self.user.name} is online in Champaign!")
 
 
 bot = Bot()
