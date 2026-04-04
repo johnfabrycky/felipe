@@ -341,7 +341,7 @@ class Parking(commands.Cog):
 
             embed.add_field(name="Resident/Guest Spots", value=res_value, inline=False)
             embed.add_field(name="Staff Parking", value=staff_status, inline=False)
-            embed.set_footer(text="Gerald Parking System - Chicago Time")
+            embed.set_footer(text="Felipe Parking System - Chicago Time")
             self._store_cached_parking_status_embed(embed)
 
         await interaction.followup.send(embed=self._clone_embed(embed), ephemeral=True)
