@@ -1,15 +1,21 @@
 """Bot application setup, command registration, and startup hooks."""
 
+import logging
+import math
 import os
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 from supabase import create_client
 
 from bot.config import GUILD_ID, INITIAL_EXTENSIONS, MY_GUILD
+from bot.utils.discord_http_logging import install_discord_http_rate_limit_logging
 
 load_dotenv()
+logger = logging.getLogger(__name__)
+install_discord_http_rate_limit_logging()
 
 
 class Bot(commands.Bot):
@@ -63,6 +69,69 @@ class Bot(commands.Bot):
 
 
 bot = Bot()
+
+
+async def _send_ephemeral_app_error(interaction: discord.Interaction, message: str):
+    """Send an ephemeral app-command error when the interaction is still usable."""
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+    except discord.HTTPException:
+        logger.warning(
+            "Failed to send app command error response",
+            extra={
+                "command": getattr(getattr(interaction, "command", None), "name", None),
+                "user_id": str(interaction.user.id),
+            },
+        )
+
+
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Handle slash-command cooldowns and Discord-side 429 failures consistently."""
+    command_name = getattr(getattr(interaction, "command", None), "name", "unknown")
+    user_id = str(interaction.user.id)
+
+    if isinstance(error, app_commands.CommandOnCooldown):
+        retry_after = max(1, math.ceil(error.retry_after))
+        logger.info(
+            "App command hit cooldown",
+            extra={"command": command_name, "user_id": user_id, "retry_after_seconds": retry_after},
+        )
+        await _send_ephemeral_app_error(
+            interaction,
+            f"Please wait {retry_after}s before using `/{command_name}` again.",
+        )
+        return
+
+    original = getattr(error, "original", error)
+    if isinstance(original, discord.HTTPException) and original.status == 429:
+        logger.warning(
+            "Discord rate limited app command response",
+            extra={
+                "command": command_name,
+                "user_id": user_id,
+                "status": original.status,
+                "discord_error_code": original.code,
+            },
+        )
+        await _send_ephemeral_app_error(
+            interaction,
+            "Discord is rate limiting the bot right now. Please wait a few seconds and try again.",
+        )
+        return
+
+    logger.error(
+        "Unhandled app command error",
+        extra={"command": command_name, "user_id": user_id},
+        exc_info=(type(original), original, original.__traceback__),
+    )
+    await _send_ephemeral_app_error(
+        interaction,
+        "Something went wrong while running that command.",
+    )
 
 
 @bot.command()

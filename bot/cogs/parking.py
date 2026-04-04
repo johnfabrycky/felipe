@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections import Counter
 from datetime import datetime, timedelta
 
@@ -11,6 +12,7 @@ from bot.services.parking_service import ParkingService
 from bot.utils.constants import LOCAL_TZ, STAFF_SPOTS, VALID_SPOTS, WEEKDAYS
 
 logger = logging.getLogger(__name__)
+STATUS_CACHE_TTL_SECONDS = 15
 
 
 class Parking(commands.Cog):
@@ -29,6 +31,25 @@ class Parking(commands.Cog):
         """Initialize the parking cog and its shared service layer."""
         self.bot = bot
         self.service = ParkingService(bot.supabase)
+        self._parking_status_cache = None
+        self._parking_status_cache_expires_at = 0.0
+        self._parking_status_lock = asyncio.Lock()
+
+    @staticmethod
+    def _clone_embed(embed):
+        """Create a detached embed copy safe to reuse across interactions."""
+        return discord.Embed.from_dict(embed.to_dict())
+
+    def _get_cached_parking_status_embed(self):
+        """Return the cached parking-status embed while it is still fresh."""
+        if self._parking_status_cache is None or time.monotonic() >= self._parking_status_cache_expires_at:
+            return None
+        return self._clone_embed(self._parking_status_cache)
+
+    def _store_cached_parking_status_embed(self, embed):
+        """Store a short-lived parking-status embed to absorb burst traffic."""
+        self._parking_status_cache = self._clone_embed(embed)
+        self._parking_status_cache_expires_at = time.monotonic() + STATUS_CACHE_TTL_SECONDS
 
     @staticmethod
     def _mark_autocomplete_responded(response):
@@ -243,74 +264,87 @@ class Parking(commands.Cog):
         await interaction.followup.send(msg, ephemeral=not success)
 
     @app_commands.command(name="parking_status", description="View available parking spots")
+    @app_commands.checks.cooldown(1, 10.0, key=lambda interaction: interaction.user.id)
     async def parking_status(self, interaction: discord.Interaction):
         """Summarize resident, guest, and staff parking availability for the next week."""
-        await interaction.response.defer(ephemeral=True)
+        cached_embed = self._get_cached_parking_status_embed()
+        if cached_embed is not None:
+            await interaction.response.send_message(embed=cached_embed, ephemeral=True)
+            return
 
-        now = datetime.now(LOCAL_TZ).replace(minute=0, second=0, microsecond=0)
-        cutoff = now + timedelta(days=7)
-        raw_offers, raw_claims, guest_spots = await self.service.get_parking_data(now, cutoff)
+        async with self._parking_status_lock:
+            cached_embed = self._get_cached_parking_status_embed()
+            if cached_embed is not None:
+                await interaction.response.send_message(embed=cached_embed, ephemeral=True)
+                return
 
-        offers_db = {}
-        for row in raw_offers:
-            spot_num = row["spot_number"]
-            offers_db.setdefault(spot_num, []).append(
-                {
-                    "start": datetime.fromisoformat(row["start_time"]).astimezone(LOCAL_TZ),
-                    "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
-                }
+            await interaction.response.defer(ephemeral=True)
+
+            now = datetime.now(LOCAL_TZ).replace(minute=0, second=0, microsecond=0)
+            cutoff = now + timedelta(days=7)
+            raw_offers, raw_claims, guest_spots = await self.service.get_parking_data(now, cutoff)
+
+            offers_db = {}
+            for row in raw_offers:
+                spot_num = row["spot_number"]
+                offers_db.setdefault(spot_num, []).append(
+                    {
+                        "start": datetime.fromisoformat(row["start_time"]).astimezone(LOCAL_TZ),
+                        "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
+                    }
+                )
+
+            claims_db = {}
+            for row in raw_claims:
+                spot_num = row["spot_number"]
+                claims_db.setdefault(spot_num, []).append(
+                    {
+                        "start": datetime.fromisoformat(row["start_time"]).astimezone(LOCAL_TZ),
+                        "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
+                    }
+                )
+
+            lines = []
+            all_spots = sorted(set(list(offers_db.keys()) + guest_spots))
+            for spot_num in all_spots:
+                spot_offers = offers_db.get(spot_num, [])
+                spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
+                is_guest = spot_num in guest_spots
+
+                header, blocks = self.service.get_merged_availability(now, cutoff, spot_offers, spot_claims, is_guest)
+                detail = " | ".join(
+                    [
+                        f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
+                        f"{block[0].strftime('%a %I%p')}-{block[1].strftime('%a %I%p')}"
+                        for block in blocks
+                    ]
+                )
+                lines.append(f"**Spot {spot_num}**: {header}\n- Free: {detail or 'Fully Booked'}")
+
+            is_blk = self.service.is_blackout(now, now + timedelta(hours=1))
+            staff_claims = claims_db.get(STAFF_SPOTS[0], []) + claims_db.get(STAFF_SPOTS[1], [])
+            active_staff = len([claim for claim in staff_claims if claim["start"] <= now < claim["end"]])
+            if is_blk:
+                staff_status = "Closed (Blackout)"
+            else:
+                free_count = len(STAFF_SPOTS) - active_staff
+                staff_status = f"{free_count}/{len(STAFF_SPOTS)} Free"
+
+            embed = discord.Embed(
+                title="Parking Status (Next 7 Days)",
+                color=discord.Color.blue(),
+                timestamp=datetime.now(LOCAL_TZ),
             )
+            res_value = "\n".join(lines) if lines else "No spots currently offered."
+            if len(res_value) > 1024:
+                res_value = res_value[:1020] + "..."
 
-        claims_db = {}
-        for row in raw_claims:
-            spot_num = row["spot_number"]
-            claims_db.setdefault(spot_num, []).append(
-                {
-                    "start": datetime.fromisoformat(row["start_time"]).astimezone(LOCAL_TZ),
-                    "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
-                }
-            )
+            embed.add_field(name="Resident/Guest Spots", value=res_value, inline=False)
+            embed.add_field(name="Staff Parking", value=staff_status, inline=False)
+            embed.set_footer(text="Felipe Parking System - Chicago Time")
+            self._store_cached_parking_status_embed(embed)
 
-        lines = []
-        all_spots = sorted(set(list(offers_db.keys()) + guest_spots))
-        for spot_num in all_spots:
-            spot_offers = offers_db.get(spot_num, [])
-            spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
-            is_guest = spot_num in guest_spots
-
-            header, blocks = self.service.get_merged_availability(now, cutoff, spot_offers, spot_claims, is_guest)
-            detail = " | ".join(
-                [
-                    f"{'🟢' if block[0] <= now < block[1] else '📅'} "
-                    f"{block[0].strftime('%a %I%p')}-{block[1].strftime('%a %I%p')}"
-                    for block in blocks
-                ]
-            )
-            lines.append(f"**Spot {spot_num}**: {header}\n└ *Free:* {detail or '❌ Fully Booked'}")
-
-        is_blk = self.service.is_blackout(now, now + timedelta(hours=1))
-        staff_claims = claims_db.get(STAFF_SPOTS[0], []) + claims_db.get(STAFF_SPOTS[1], [])
-        active_staff = len([claim for claim in staff_claims if claim["start"] <= now < claim["end"]])
-        if is_blk:
-            staff_status = "❌ Closed (Blackout)"
-        else:
-            free_count = len(STAFF_SPOTS) - active_staff
-            staff_status = f"✅ {free_count}/{len(STAFF_SPOTS)} Free"
-
-        embed = discord.Embed(
-            title="🚗 Parking Status (Next 7 Days)",
-            color=discord.Color.blue(),
-            timestamp=datetime.now(LOCAL_TZ),
-        )
-        res_value = "\n".join(lines) if lines else "No spots currently offered."
-        if len(res_value) > 1024:
-            res_value = res_value[:1020] + "..."
-
-        embed.add_field(name="Resident/Guest Spots", value=res_value, inline=False)
-        embed.add_field(name="Staff Parking", value=staff_status, inline=False)
-        embed.set_footer(text="Gerald Parking System • Chicago Time")
-
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=self._clone_embed(embed), ephemeral=True)
 
     async def cancel_spot_autocomplete(
             self,
