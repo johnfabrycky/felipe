@@ -473,6 +473,39 @@ class ParkingServiceTests(unittest.TestCase):
         self.assertIn("full", message.lower())
         query.insert.assert_not_called()
 
+    @patch("bot.services.parking_service.logger")
+    @patch("bot.services.parking_service.create_client")
+    def test_claim_autocomplete_logs_clear_message_for_remote_protocol_error(self, create_client_mock, logger_mock):
+        create_client_mock.return_value = MagicMock()
+        service = ParkingService()
+
+        class RemoteProtocolError(Exception):
+            pass
+
+        service._get_claim_autocomplete_data_sync = MagicMock(
+            side_effect=RemoteProtocolError(
+                "<ConnectionTerminated error_code:9, last_stream_id:7, additional_data:None>"
+            )
+        )
+        now = datetime(2026, 4, 6, 18, 0, tzinfo=parking_module.LOCAL_TZ)
+
+        payload = asyncio.run(service.get_claim_autocomplete_data(now))
+
+        self.assertEqual(payload, ([], [], []))
+        logger_mock.exception.assert_called_once()
+        self.assertEqual(
+            logger_mock.exception.call_args.args[0],
+            "Parking service Supabase/PostgREST connection terminated during request",
+        )
+        self.assertEqual(
+            logger_mock.exception.call_args.kwargs["extra"],
+            {
+                "operation": "get_claim_autocomplete_data",
+                "error_type": "RemoteProtocolError",
+                "error_message": "<ConnectionTerminated error_code:9, last_stream_id:7, additional_data:None>",
+            },
+        )
+
     @patch("bot.services.parking_service.create_client")
     def test_is_blackout_detects_sunday_morning_blackout_hours(self, create_client_mock):
         create_client_mock.return_value = MagicMock()
