@@ -145,14 +145,15 @@ class Parking(commands.Cog):
             return await interaction.response.send_message("❌ Offers must be at least 2 hours.", ephemeral=True)
 
         await interaction.response.defer(ephemeral=True)
-        success, msg = await self.service.create_offers(interaction.user.id, spot, start, end, weeks)
+        success, msg = await self.service.create_offers(interaction.user.id, interaction.user.name, spot, start, end,
+                                                        weeks)
         await interaction.followup.send(msg, ephemeral=not success)
         return None
 
     async def claim_spot_autocomplete(
-        self,
-        interaction: discord.Interaction,
-        current: str,
+            self,
+            interaction: discord.Interaction,
+            current: str,
     ) -> list[app_commands.Choice[int]]:
         """Suggest claimable spots that appear to cover the selected time window."""
         log_context = {"user_id": str(interaction.user.id), "current": current}
@@ -160,7 +161,8 @@ class Parking(commands.Cog):
         try:
             namespace = interaction.namespace
             required_fields = ("start_day", "start_time", "end_day", "end_time")
-            if not all(hasattr(namespace, field) and getattr(namespace, field) is not None for field in required_fields):
+            if not all(
+                    hasattr(namespace, field) and getattr(namespace, field) is not None for field in required_fields):
                 return await self._finalize_autocomplete(
                     interaction,
                     [],
@@ -247,7 +249,8 @@ class Parking(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         # 2. Wait for the database
-        success, msg = await self.service.claim_resident_spot(interaction.user.id, spot, start, end)
+        success, msg = await self.service.claim_resident_spot(interaction.user.id, interaction.user.name, spot, start,
+                                                              end)
 
         if not success:
             # 3a. If it failed, send the error privately via the followup webhook
@@ -278,7 +281,7 @@ class Parking(commands.Cog):
                                                          end_time.value)
         await interaction.response.defer(ephemeral=True)
 
-        success, msg = await self.service.claim_staff_spot(interaction.user.id, start, end)
+        success, msg = await self.service.claim_staff_spot(interaction.user.id, interaction.user.name, start, end)
 
         if not success:
             await interaction.followup.send(msg)

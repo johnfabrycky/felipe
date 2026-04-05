@@ -129,7 +129,8 @@ class Lates(commands.Cog):
         try:
             rows = await self.service.get_autocomplete_lates(interaction.user.id)
         except Exception:
-            logger.exception("Late autocomplete failed", extra={"user_id": str(interaction.user.id), "current": current})
+            logger.exception("Late autocomplete failed",
+                             extra={"user_id": str(interaction.user.id), "current": current})
             return []
 
         choices = []
