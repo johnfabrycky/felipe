@@ -147,6 +147,7 @@ class Parking(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         success, msg = await self.service.create_offers(interaction.user.id, spot, start, end, weeks)
         await interaction.followup.send(msg, ephemeral=not success)
+        return None
 
     async def claim_spot_autocomplete(
         self,
@@ -242,9 +243,25 @@ class Parking(commands.Cog):
         if duration < timedelta(hours=2) or duration > timedelta(days=7):
             return await interaction.response.send_message("❌ Must be between 2h and 7d.", ephemeral=True)
 
+        # 1. Defer privately. Any errors from here out will be hidden.
         await interaction.response.defer(ephemeral=True)
+
+        # 2. Wait for the database
         success, msg = await self.service.claim_resident_spot(interaction.user.id, spot, start, end)
-        await interaction.followup.send(msg, ephemeral=not success)
+
+        if not success:
+            # 3a. If it failed, send the error privately via the followup webhook
+            await interaction.followup.send(msg)
+            return None
+
+        # 3b. If it succeeded, send a PUBLIC message directly to the channel
+        # This requires the bot to have the "Send Messages" permission in this channel.
+        await interaction.channel.send(f"<@{interaction.user.id}> claimed spot {spot}!\n{msg}")
+
+        # 4. You MUST still resolve the interaction for the user, otherwise
+        # it will say "The application did not respond" on their screen.
+        await interaction.delete_original_response()
+        return None
 
     @app_commands.command(name="claim_staff", description="Reserve a staff spot")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
@@ -260,8 +277,16 @@ class Parking(commands.Cog):
         start, end, _duration = self.service.parse_range(start_day.value, start_time.value, end_day.value,
                                                          end_time.value)
         await interaction.response.defer(ephemeral=True)
+
         success, msg = await self.service.claim_staff_spot(interaction.user.id, start, end)
-        await interaction.followup.send(msg, ephemeral=not success)
+
+        if not success:
+            await interaction.followup.send(msg)
+            return None
+
+        await interaction.channel.send(f"<@{interaction.user.id}> claimed a staff spot!\n{msg}")
+        await interaction.delete_original_response()
+        return None
 
     @app_commands.command(name="parking_status", description="View available parking spots")
     @app_commands.checks.cooldown(1, 10.0, key=lambda interaction: interaction.user.id)
