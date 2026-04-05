@@ -614,3 +614,10 @@ class ParkingServiceTests(unittest.TestCase):
 
         service = ParkingService()
         service.supabase = FakeSupabase(store)
+
+        success, _message, pings = asyncio.run(service.cancel_action(1234, "offer", "offer-1"))
+
+        self.assertTrue(success)
+        self.assertEqual(pings, [])
+        remaining_ids = [row["id"] for row in store["parking_offers"]]
+        self.assertEqual(remaining_ids, ["offer-2", "offer-3"])
