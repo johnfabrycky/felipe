@@ -208,7 +208,7 @@ class ParkingService:
             log_context={"operation": "get_parking_data"},
         )
 
-    def _create_offers_sync(self, user_id, spot, base_start, base_end, weeks):
+    def _create_offers_sync(self, user_id, username, spot, base_start, base_end, weeks):
         all_offers = []
         for i in range(weeks):
             start = base_start + timedelta(weeks=i)
@@ -228,6 +228,7 @@ class ParkingService:
                     {
                         "spot_number": spot,
                         "owner_id": str(user_id),
+                        "owner_discord_username": username,
                         "start_time": start.isoformat(),
                         "end_time": end.isoformat(),
                     }
@@ -248,22 +249,23 @@ class ParkingService:
         )
         return True, success_msg
 
-    async def create_offers(self, user_id, spot, base_start, base_end, weeks):
+    async def create_offers(self, user_id, username, spot, base_start, base_end, weeks):
         """Create one or more weekly parking offers and return a user-facing confirmation."""
         try:
             return await self._run_blocking(
                 self._create_offers_sync,
                 user_id,
+                username,
                 spot,
                 base_start,
                 base_end,
                 weeks,
-                log_context={"operation": "create_offers", "user_id": str(user_id), "spot": spot},
+                log_context={"operation": "create_offers", "user_id": str(user_id), "username": username, "spot": spot},
             )
         except Exception as e:
             return False, f"❌ Database error: {e}"
 
-    def _claim_resident_spot_sync(self, user_id, spot, start, end):
+    def _claim_resident_spot_sync(self, user_id, username, spot, start, end):
         conflict = (
             self.supabase.table("parking_reservations")
             .select("*")
@@ -293,6 +295,7 @@ class ParkingService:
             {
                 "spot_number": spot,
                 "claimer_id": str(user_id),
+                "claimer_discord_username": username,
                 "start_time": start.isoformat(),
                 "end_time": end.isoformat(),
                 "offer_id": offer_id,
@@ -300,18 +303,20 @@ class ParkingService:
         ).execute()
         return True, f"✅ **Spot {spot}** reserved!"
 
-    async def claim_resident_spot(self, user_id, spot, start, end):
+    async def claim_resident_spot(self, user_id, username, spot, start, end):
         """Reserve a guest spot or a resident spot covered by an existing offer."""
         return await self._run_blocking(
             self._claim_resident_spot_sync,
             user_id,
+            username,
             spot,
             start,
             end,
-            log_context={"operation": "claim_resident_spot", "user_id": str(user_id), "spot": spot},
+            log_context={"operation": "claim_resident_spot", "user_id": str(user_id), "username": username,
+                         "spot": spot},
         )
 
-    def _claim_staff_spot_sync(self, user_id, start, end):
+    def _claim_staff_spot_sync(self, user_id, username, start, end):
         if self.is_blackout(start, end):
             return False, "❌ Blackout hours active."
 
@@ -333,20 +338,22 @@ class ParkingService:
             {
                 "spot_number": assigned,
                 "claimer_id": str(user_id),
+                "claimer_discord_username": username,
                 "start_time": start.isoformat(),
                 "end_time": end.isoformat(),
             }
         ).execute()
         return True, f"✅ Staff Spot reserved ({start.strftime('%a %I%p')})."
 
-    async def claim_staff_spot(self, user_id, start, end):
+    async def claim_staff_spot(self, user_id, username, start, end):
         """Assign the first available staff spot for a requested window."""
         return await self._run_blocking(
             self._claim_staff_spot_sync,
             user_id,
+            username,
             start,
             end,
-            log_context={"operation": "claim_staff_spot", "user_id": str(user_id)},
+            log_context={"operation": "claim_staff_spot", "user_id": str(user_id), "username": username},
         )
 
     def _cancel_action_sync(self, user_id, action_type, record_id):

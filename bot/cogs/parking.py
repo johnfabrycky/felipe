@@ -145,7 +145,7 @@ class Parking(commands.Cog):
             return await interaction.response.send_message("❌ Offers must be at least 2 hours.", ephemeral=True)
 
         await interaction.response.defer(ephemeral=True)
-        success, msg = await self.service.create_offers(interaction.user.id, spot, start, end, weeks)
+        success, msg = await self.service.create_offers(interaction.user.id, interaction.user.name, spot, start, end, weeks)
         await interaction.followup.send(msg, ephemeral=not success)
         return None
 
@@ -247,7 +247,7 @@ class Parking(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         # 2. Wait for the database
-        success, msg = await self.service.claim_resident_spot(interaction.user.id, spot, start, end)
+        success, msg = await self.service.claim_resident_spot(interaction.user.id, interaction.user.name, spot, start, end)
 
         if not success:
             # 3a. If it failed, send the error privately via the followup webhook
@@ -278,7 +278,7 @@ class Parking(commands.Cog):
                                                          end_time.value)
         await interaction.response.defer(ephemeral=True)
 
-        success, msg = await self.service.claim_staff_spot(interaction.user.id, start, end)
+        success, msg = await self.service.claim_staff_spot(interaction.user.id, interaction.user.name, start, end)
 
         if not success:
             await interaction.followup.send(msg)
