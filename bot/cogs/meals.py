@@ -21,9 +21,9 @@ class Meals(commands.Cog):
 
         for meal in getattr(self.bot, "meal_cache", []):
             if (
-                meal["week_number"] == week
-                and meal["day"].strip() == day
-                and meal["meal_type"] == meal_type
+                    meal["week_number"] == week
+                    and meal["day"].strip() == day
+                    and meal["meal_type"] == meal_type
             ):
                 return meal["dish_name"]
 
