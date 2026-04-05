@@ -9,6 +9,11 @@ from supabase import create_client
 
 from bot.utils.constants import GUEST_SPOTS, LOCAL_TZ, STAFF_SPOTS, VALID_SPOTS
 
+try:
+    import httpx
+except ImportError:  # pragma: no cover - httpx is provided transitively in production.
+    httpx = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,15 +33,55 @@ class ParkingService:
         self._claim_autocomplete_cache = None
         self._cancel_autocomplete_cache = {}
 
+    @staticmethod
+    def _build_log_context(log_context=None, **extra_fields):
+        """Merge contextual log fields without mutating the caller's payload."""
+        merged = dict(log_context or {})
+        merged.update({key: value for key, value in extra_fields.items() if value is not None})
+        return merged
+
+    @staticmethod
+    def _is_remote_protocol_error(exc):
+        """Detect the HTTP protocol termination errors raised by the Supabase stack."""
+        if httpx is not None and isinstance(exc, httpx.RemoteProtocolError):
+            return True
+        return exc.__class__.__name__ == "RemoteProtocolError"
+
+    @staticmethod
+    def _is_transport_error(exc):
+        """Detect broader HTTP transport failures from the Supabase/PostgREST client."""
+        if httpx is not None and isinstance(exc, httpx.TransportError):
+            return True
+        return exc.__class__.__name__.endswith(("ProtocolError", "TransportError", "NetworkError"))
+
     async def _run_blocking(self, func, *args, timeout=15, log_context=None):
         """Run a blocking Supabase operation off the event loop with timeout/logging."""
         try:
             return await asyncio.wait_for(asyncio.to_thread(func, *args), timeout=timeout)
         except asyncio.TimeoutError:
-            logger.exception("Parking service operation timed out", extra=log_context or {})
+            logger.exception(
+                "Parking service operation timed out",
+                extra=self._build_log_context(log_context, error_type="TimeoutError"),
+            )
             raise
-        except Exception:
-            logger.exception("Parking service operation failed", extra=log_context or {})
+        except Exception as exc:
+            extra = self._build_log_context(
+                log_context,
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+            if self._is_remote_protocol_error(exc):
+                logger.exception(
+                    "Parking service Supabase/PostgREST connection terminated during request",
+                    extra=extra,
+                )
+            elif self._is_transport_error(exc):
+                logger.exception(
+                    "Parking service Supabase/PostgREST transport error",
+                    extra=extra,
+                )
+            else:
+                logger.exception("Parking service operation failed", extra=extra)
             raise
 
     def _get_cached_value(self, cache_entry):
