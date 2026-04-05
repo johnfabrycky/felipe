@@ -412,7 +412,6 @@ class ParkingServiceTests(unittest.TestCase):
         start = datetime(2026, 4, 2, 16, 0, tzinfo=parking_module.LOCAL_TZ)
         end = datetime(2026, 4, 5, 12, 0, tzinfo=parking_module.LOCAL_TZ)
 
-        # Added the username parameter
         success, message = asyncio.run(service.create_offers(1234, "TestUser", 27, start, end, 1))
 
         self.assertTrue(success)
@@ -429,7 +428,6 @@ class ParkingServiceTests(unittest.TestCase):
         start = datetime(2026, 4, 6, 16, 0, tzinfo=parking_module.LOCAL_TZ)
         end = datetime(2026, 4, 6, 18, 0, tzinfo=parking_module.LOCAL_TZ)
 
-        # Added the username parameter
         success, message = asyncio.run(service.claim_staff_spot(1234, "TestUser", start, end))
 
         self.assertFalse(success)
@@ -447,7 +445,6 @@ class ParkingServiceTests(unittest.TestCase):
         start = datetime(2026, 4, 6, 18, 0, tzinfo=parking_module.LOCAL_TZ)
         end = datetime(2026, 4, 6, 20, 0, tzinfo=parking_module.LOCAL_TZ)
 
-        # Added the username parameter
         success, message = asyncio.run(service.claim_staff_spot(1234, "TestUser", start, end))
 
         self.assertTrue(success)
@@ -474,7 +471,6 @@ class ParkingServiceTests(unittest.TestCase):
         start = datetime(2026, 4, 6, 18, 0, tzinfo=parking_module.LOCAL_TZ)
         end = datetime(2026, 4, 6, 20, 0, tzinfo=parking_module.LOCAL_TZ)
 
-        # Added the username parameter
         success, message = asyncio.run(service.claim_staff_spot(1234, "TestUser", start, end))
 
         self.assertFalse(success)
