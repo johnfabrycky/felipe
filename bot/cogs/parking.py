@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.services.parking_service import ParkingService
-from bot.utils.constants import LOCAL_TZ, STAFF_SPOTS, VALID_SPOTS, WEEKDAYS
+from bot.config import LOCAL_TZ, STAFF_SPOTS, VALID_SPOTS, WEEKDAYS
 
 logger = logging.getLogger(__name__)
 STATUS_CACHE_TTL_SECONDS = 15
