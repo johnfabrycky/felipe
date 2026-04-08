@@ -7,7 +7,7 @@ import discord
 
 from bot.cogs import meals as meals_module
 from bot.services.meals_service import MealsService
-from bot.utils.constants import LOCAL_TZ
+from bot.config import LOCAL_TZ
 from bot.utils.meal_calendar import AcademicBreak, MealCalendarConfig
 
 

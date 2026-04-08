@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from bot.utils.constants import LOCAL_TZ
+from bot.config import LOCAL_TZ
 from bot.utils.meal_calendar import AcademicBreak, MealCalendarConfig
 
 
