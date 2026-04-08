@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from supabase import create_client
 
-from bot.utils.constants import GUEST_SPOTS, LOCAL_TZ, STAFF_SPOTS, VALID_SPOTS
+from bot.config import LOCAL_TZ, STAFF_SPOTS, VALID_SPOTS
 
 try:
     import httpx

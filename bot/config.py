@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import discord
+import pytz
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 GUILD_ID = 1401634963631247512
@@ -16,3 +17,8 @@ INITIAL_EXTENSIONS = [
     "bot.cogs.feedback",
     # "bot.cogs.random_ping",
 ]
+
+LOCAL_TZ = pytz.timezone('America/Chicago')
+
+VALID_SPOTS = list(range(1, 34)) + list(range(41, 47))
+STAFF_SPOTS = [998, 999]
