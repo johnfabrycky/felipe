@@ -32,9 +32,18 @@ class ParkingService:
         self.supabase = supabase
         self._claim_autocomplete_cache = None
         self._cancel_autocomplete_cache = {}
+        self._spot_mutation_locks = {}
+        self._staff_mutation_lock = asyncio.Lock()
+        self._fallback_mutation_lock = asyncio.Lock()
 
         # In-memory cache for guest spots loaded on startup
         self.guest_spots_cache = set()
+
+    def _get_mutation_lock_for_spot(self, spot):
+        """Return the shared mutation lock for one parking spot or the staff pool."""
+        if spot in STAFF_SPOTS:
+            return self._staff_mutation_lock
+        return self._spot_mutation_locks.setdefault(int(spot), asyncio.Lock())
 
     @staticmethod
     def _build_log_context(log_context=None, **extra_fields):
@@ -276,19 +285,21 @@ class ParkingService:
 
     async def create_offers(self, user_id, username, spot, base_start, base_end, weeks):
         """Create one or more weekly parking offers and return a user-facing confirmation."""
-        try:
-            return await self._run_blocking(
-                self._create_offers_sync,
-                user_id,
-                username,
-                spot,
-                base_start,
-                base_end,
-                weeks,
-                log_context={"operation": "create_offers", "user_id": str(user_id), "username": username, "spot": spot},
-            )
-        except Exception as e:
-            return False, f"❌ Database error: {e}"
+        async with self._get_mutation_lock_for_spot(spot):
+            try:
+                return await self._run_blocking(
+                    self._create_offers_sync,
+                    user_id,
+                    username,
+                    spot,
+                    base_start,
+                    base_end,
+                    weeks,
+                    log_context={"operation": "create_offers", "user_id": str(user_id), "username": username,
+                                 "spot": spot},
+                )
+            except Exception as e:
+                return False, f"❌ Database error: {e}"
 
     def _claim_resident_spot_sync(self, user_id, username, spot, start, end):
         conflict = (
@@ -335,16 +346,17 @@ class ParkingService:
 
     async def claim_resident_spot(self, user_id, username, spot, start, end):
         """Reserve a guest spot or a resident spot covered by an existing offer."""
-        return await self._run_blocking(
-            self._claim_resident_spot_sync,
-            user_id,
-            username,
-            spot,
-            start,
-            end,
-            log_context={"operation": "claim_resident_spot", "user_id": str(user_id), "username": username,
-                         "spot": spot},
-        )
+        async with self._get_mutation_lock_for_spot(spot):
+            return await self._run_blocking(
+                self._claim_resident_spot_sync,
+                user_id,
+                username,
+                spot,
+                start,
+                end,
+                log_context={"operation": "claim_resident_spot", "user_id": str(user_id), "username": username,
+                             "spot": spot},
+            )
 
     def _claim_staff_spot_sync(self, user_id, username, start, end):
         if self.is_blackout(start, end):
@@ -381,14 +393,28 @@ class ParkingService:
 
     async def claim_staff_spot(self, user_id, username, start, end):
         """Assign the first available staff spot for a requested window."""
-        return await self._run_blocking(
-            self._claim_staff_spot_sync,
-            user_id,
-            username,
-            start,
-            end,
-            log_context={"operation": "claim_staff_spot", "user_id": str(user_id), "username": username},
+        async with self._staff_mutation_lock:
+            return await self._run_blocking(
+                self._claim_staff_spot_sync,
+                user_id,
+                username,
+                start,
+                end,
+                log_context={"operation": "claim_staff_spot", "user_id": str(user_id), "username": username},
+            )
+
+    def _resolve_cancel_target_spot_sync(self, action_type, record_id):
+        """Resolve the affected spot so cancel operations share the same write lock."""
+        table_name = "parking_offers" if action_type == "offer" else "parking_reservations"
+        response = (
+            self.supabase.table(table_name)
+            .select("spot_number")
+            .eq("id", str(record_id))
+            .execute()
         )
+        if response.data:
+            return response.data[0]["spot_number"]
+        return None
 
     def _cancel_action_sync(self, user_id, action_type, record_id):
         now_iso = datetime.now(LOCAL_TZ).isoformat()
@@ -438,15 +464,33 @@ class ParkingService:
 
     async def cancel_action(self, user_id, action_type, record_id):
         """Cancel one selected offer or reservation and return any affected user mentions."""
-        return await self._run_blocking(
-            self._cancel_action_sync,
-            user_id,
-            action_type,
-            record_id,
-            timeout=15,
-            log_context={"operation": "cancel_action", "user_id": str(user_id), "action_type": action_type,
-                         "record_id": str(record_id)},
-        )
+        log_context = {"operation": "cancel_action", "user_id": str(user_id), "action_type": action_type,
+                       "record_id": str(record_id)}
+        lock = self._fallback_mutation_lock
+
+        try:
+            spot = await self._run_blocking(
+                self._resolve_cancel_target_spot_sync,
+                action_type,
+                record_id,
+                timeout=5,
+                log_context={**log_context, "phase": "resolve_cancel_target"},
+            )
+        except Exception:
+            spot = None
+
+        if spot is not None:
+            lock = self._get_mutation_lock_for_spot(spot)
+
+        async with lock:
+            return await self._run_blocking(
+                self._cancel_action_sync,
+                user_id,
+                action_type,
+                record_id,
+                timeout=15,
+                log_context=log_context,
+            )
 
     def _get_user_activity_sync(self, user_id):
         now_iso = datetime.now(LOCAL_TZ).isoformat()
