@@ -8,6 +8,8 @@ import discord
 
 from bot.cogs import parking as parking_module
 from bot.services.parking_service import ParkingService
+from bot.config import MINIMUM_RESERVATION_HOURS
+from bot.config import MAXIMUM_RESERVATION_DAYS
 
 
 def make_interaction(user_id=1234, username="TestUser"):
@@ -122,7 +124,7 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
             10,
         )
 
-        interaction.response.send_message.assert_awaited_once_with("❌ Must be between 2h and 7d.", ephemeral=True)
+        interaction.response.send_message.assert_awaited_once_with(f"❌ Must be between {MINIMUM_RESERVATION_HOURS} hour and {MAXIMUM_RESERVATION_DAYS} days.", ephemeral=True)
 
     async def test_claim_spot_autocomplete_filters_to_window_compatible_spots(self):
         start = datetime.fromisoformat("2026-04-02T16:00:00-05:00")
@@ -622,3 +624,55 @@ class ParkingServiceTests(unittest.TestCase):
         self.assertEqual(pings, [])
         remaining_ids = [row["id"] for row in store["parking_offers"]]
         self.assertEqual(remaining_ids, ["offer-2", "offer-3"])
+
+
+class ParkingServiceLockingTests(unittest.IsolatedAsyncioTestCase):
+    """Concurrency tests for parking write serialization."""
+
+    async def test_same_spot_mutations_are_serialized(self):
+        service = ParkingService(supabase=MagicMock())
+        start = datetime(2026, 4, 6, 18, 0, tzinfo=parking_module.LOCAL_TZ)
+        end = start + timedelta(hours=2)
+        active_calls = 0
+        max_active_calls = 0
+
+        async def fake_run_blocking(_func, *args, **kwargs):
+            nonlocal active_calls, max_active_calls
+            active_calls += 1
+            max_active_calls = max(max_active_calls, active_calls)
+            await asyncio.sleep(0.05)
+            active_calls -= 1
+            return True, "ok"
+
+        service._run_blocking = fake_run_blocking
+
+        await asyncio.gather(
+            service.create_offers(1, "Owner", 27, start, end, 1),
+            service.claim_resident_spot(2, "Claimer", 27, start, end),
+        )
+
+        self.assertEqual(max_active_calls, 1)
+
+    async def test_different_spot_mutations_can_run_in_parallel(self):
+        service = ParkingService(supabase=MagicMock())
+        start = datetime(2026, 4, 6, 18, 0, tzinfo=parking_module.LOCAL_TZ)
+        end = start + timedelta(hours=2)
+        active_calls = 0
+        max_active_calls = 0
+
+        async def fake_run_blocking(_func, *args, **kwargs):
+            nonlocal active_calls, max_active_calls
+            active_calls += 1
+            max_active_calls = max(max_active_calls, active_calls)
+            await asyncio.sleep(0.05)
+            active_calls -= 1
+            return True, "ok"
+
+        service._run_blocking = fake_run_blocking
+
+        await asyncio.gather(
+            service.create_offers(1, "Owner", 27, start, end, 1),
+            service.claim_resident_spot(2, "Claimer", 28, start, end),
+        )
+
+        self.assertEqual(max_active_calls, 2)
