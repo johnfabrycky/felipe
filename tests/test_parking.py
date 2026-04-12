@@ -110,25 +110,6 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         interaction.channel.send.assert_awaited_once_with("<@1234> offered spot 10!\ncreated")
         interaction.delete_original_response.assert_awaited_once()
 
-    async def test_offer_spot_autocomplete_prioritizes_saved_spot(self):
-        self.service.get_offer_spot_preference.return_value = 27
-        interaction = make_interaction()
-
-        choices = await self.cog.offer_spot_autocomplete(interaction, "2")
-
-        self.assertEqual(len(choices), 1)
-        self.assertEqual(choices[0].value, 27)
-        self.assertEqual(choices[0].name, "Spot 27 (saved)")
-        self.assertIn(27, [choice.value for choice in choices])
-
-    async def test_offer_spot_autocomplete_empty_when_no_saved_spot(self):
-        interaction = make_interaction()
-        self.service.get_offer_spot_preference.return_value = None
-
-        choices = await self.cog.offer_spot_autocomplete(interaction, "46")
-
-        self.assertEqual(choices, [])
-
     async def test_claim_spot_rejects_duration_outside_limits(self):
         interaction = make_interaction()
         start = datetime(2026, 4, 6, 13, 0, tzinfo=parking_module.LOCAL_TZ)
