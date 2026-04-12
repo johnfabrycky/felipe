@@ -113,7 +113,49 @@ class ParkingService:
             self._claim_autocomplete_cache = entry
             return
 
+        if cache_name == "offer_preference":
+            self._offer_spot_preference_cache[key] = entry
+            return
+
         self._cancel_autocomplete_cache[key] = entry
+
+    def _save_offer_spot_preference_sync(self, user_id, username, spot):
+        """Upsert the caller's last used resident spot for future autocomplete."""
+        # Clear any existing spot ownership for this user
+        self.supabase.table("parking_spots").update(
+            {
+                "discord_userid": None,
+                "discord_nickname": None,
+            }
+        ).eq("discord_userid", str(user_id)).execute()
+        
+        # Set ownership on the newly offered spot
+        self.supabase.table("parking_spots").update(
+            {
+                "discord_userid": str(user_id),
+                "discord_nickname": username,
+            }
+        ).eq("spot_number", int(spot)).execute()
+
+    async def save_offer_spot_preference(self, user_id, username, spot):
+        """Persist the caller's last successful offer spot without failing the command."""
+        cache_key = str(user_id)
+        try:
+            await self._run_blocking(
+                self._save_offer_spot_preference_sync,
+                user_id,
+                username,
+                spot,
+                timeout=10,
+                log_context={"operation": "save_offer_spot_preference", "user_id": cache_key, "spot": spot},
+            )
+            return True
+        except Exception:
+            logger.exception(
+                "Failed to save parking spot preference",
+                extra={"user_id": cache_key, "spot": spot},
+            )
+            return False
 
     def parse_range(self, s_day_int, s_time_str, e_day_int, e_time_str):
         """Convert weekday and hour choices into the next matching start/end datetimes."""
@@ -156,7 +198,7 @@ class ParkingService:
     def _load_cache_sync(self):
         """Fetch the current guest spots from the DB to populate the cache."""
         response = self.supabase.table("parking_spots").select("spot_number").eq("is_guest", True).execute()
-        self.guest_spots_cache = {row["spot_number"] for row in response.data}
+        self.guest_spots_cache = {int(row["spot_number"]) for row in response.data}
 
     async def load_cache(self):
         """Load mostly-static data into memory to reduce database hits."""
@@ -167,31 +209,40 @@ class ParkingService:
             logger.exception("Failed to load parking spot cache.")
 
     def _initialize_spots_sync(self):
-        # Fetch existing spots so we don't accidentally wipe is_guest status during upsert
-        existing_spots_response = self.supabase.table("parking_spots").select("spot_number, is_guest").execute()
-        existing_guest_spots = {
-            row["spot_number"] for row in existing_spots_response.data if row.get("is_guest")
+        # Fetch existing spots so we don't accidentally wipe is_guest status or user assignments during upsert
+        existing_spots_response = self.supabase.table("parking_spots").select("spot_number, is_guest, discord_userid, discord_nickname").execute()
+        
+        existing_data = {
+            int(row["spot_number"]): row for row in existing_spots_response.data
         }
 
         # Update the local cache while we have the fresh data
-        self.guest_spots_cache = existing_guest_spots
+        self.guest_spots_cache = {
+            spot for spot, data in existing_data.items() if data.get("is_guest")
+        }
 
         all_configs = []
         for spot in VALID_SPOTS:
+            old = existing_data.get(spot, {})
             all_configs.append(
                 {
                     "spot_number": spot,
                     "spot_type": "resident",
-                    "is_guest": spot in existing_guest_spots,
+                    "is_guest": old.get("is_guest", False),
+                    "discord_userid": old.get("discord_userid"),
+                    "discord_nickname": old.get("discord_nickname"),
                 }
             )
 
         for spot in STAFF_SPOTS:
+            old = existing_data.get(spot, {})
             all_configs.append(
                 {
                     "spot_number": spot,
                     "spot_type": "staff",
                     "is_guest": False,
+                    "discord_userid": old.get("discord_userid"),
+                    "discord_nickname": old.get("discord_nickname"),
                 }
             )
 
@@ -251,7 +302,7 @@ class ParkingService:
             existing = (
                 self.supabase.table("parking_offers")
                 .select("*")
-                .eq("spot_number", spot)
+                .eq("spot_number", int(spot))
                 .lt("start_time", end.isoformat())
                 .gt("end_time", start.isoformat())
                 .execute()
@@ -260,7 +311,7 @@ class ParkingService:
             if not existing.data:
                 all_offers.append(
                     {
-                        "spot_number": spot,
+                        "spot_number": int(spot),
                         "owner_id": str(user_id),
                         "owner_discord_username": username,
                         "start_time": start.isoformat(),
@@ -305,7 +356,7 @@ class ParkingService:
         conflict = (
             self.supabase.table("parking_reservations")
             .select("*")
-            .eq("spot_number", spot)
+            .eq("spot_number", int(spot))
             .lt("start_time", end.isoformat())
             .gt("end_time", start.isoformat())
             .execute()
@@ -315,11 +366,11 @@ class ParkingService:
 
         offer_id = None
         # Checking memory cache instead of querying Supabase
-        if spot not in self.guest_spots_cache:
+        if int(spot) not in self.guest_spots_cache:
             offer = (
                 self.supabase.table("parking_offers")
                 .select("id")
-                .eq("spot_number", spot)
+                .eq("spot_number", int(spot))
                 .lte("start_time", start.isoformat())
                 .gte("end_time", end.isoformat())
                 .execute()
@@ -330,7 +381,7 @@ class ParkingService:
 
         self.supabase.table("parking_reservations").insert(
             {
-                "spot_number": spot,
+                "spot_number": int(spot),
                 "claimer_id": str(user_id),
                 "claimer_discord_username": username,
                 "start_time": start.isoformat(),
@@ -370,7 +421,7 @@ class ParkingService:
             .gt("end_time", start.isoformat())
             .execute()
         )
-        occupied = [row["spot_number"] for row in conflicts.data]
+        occupied = [int(row["spot_number"]) for row in conflicts.data]
 
         if len(occupied) >= len(STAFF_SPOTS):
             return False, "❌ Staff spots are full."
@@ -413,7 +464,7 @@ class ParkingService:
             .execute()
         )
         if response.data:
-            return response.data[0]["spot_number"]
+            return int(response.data[0]["spot_number"])
         return None
 
     def _cancel_action_sync(self, user_id, action_type, record_id):

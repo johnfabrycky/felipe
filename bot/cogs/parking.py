@@ -142,7 +142,7 @@ class Parking(commands.Cog):
 
         start, end, duration = self.service.parse_range(start_day.value, start_time.value, end_day.value,
                                                         end_time.value)
-        if duration < timedelta(hours=2):
+        if duration < timedelta(hours=MINIMUM_OFFER_HOURS):
             return await interaction.response.send_message(f"❌ Offers must be at least {MINIMUM_OFFER_HOURS} hours.", ephemeral=True)
 
         await interaction.response.defer(ephemeral=True)
@@ -153,6 +153,7 @@ class Parking(commands.Cog):
             await interaction.followup.send(msg)
             return None
 
+        await self.service.save_offer_spot_preference(interaction.user.id, interaction.user.name, spot)
         await interaction.channel.send(f"<@{interaction.user.id}> offered spot {spot}!\n{msg}")
 
         await interaction.delete_original_response()
