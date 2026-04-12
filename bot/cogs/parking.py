@@ -94,23 +94,19 @@ class Parking(commands.Cog):
             interaction: discord.Interaction,
             current: str,
     ) -> list[app_commands.Choice[int]]:
-        """Suggest valid spots, highlighting the caller's saved spot if one exists."""
+        """Suggest valid spots for an offer, filtering based on user input."""
         log_context = {"user_id": str(interaction.user.id), "current": current}
+        choices = []
 
         try:
-            saved_spot = await self.service.get_offer_spot_preference(interaction.user.id)
-            choices = []
-
+            # Suggest all valid spots that match the user's current input.
             for spot in sorted(VALID_SPOTS):
-                label = f"Spot {spot} (saved)" if spot == saved_spot else f"Spot {spot}"
+                label = f"Spot {spot}"
                 if current.lower() in label.lower():
                     choices.append(app_commands.Choice(name=label, value=spot))
-
-            if saved_spot is not None and saved_spot in VALID_SPOTS:
-                choices.sort(key=lambda c: c.value != saved_spot)
-
         except Exception:
             logger.exception("Parking offer_spot autocomplete failed", extra=log_context)
+            # Return an empty list on failure
             choices = []
 
         return await self._finalize_autocomplete(
