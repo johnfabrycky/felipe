@@ -60,6 +60,8 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         self.service.get_guest_spot_list = AsyncMock()
         self.service.get_cancel_autocomplete_data = AsyncMock(return_value=([], []))
         self.service.get_claim_autocomplete_data = AsyncMock(return_value=([], [], []))
+        self.service.get_offer_spot_preference = AsyncMock(return_value=None)
+        self.service.save_offer_spot_preference = AsyncMock(return_value=True)
         self.service.parse_range = MagicMock()
         self.service.get_merged_availability = MagicMock()
         self.service_cls.return_value = self.service
@@ -104,9 +106,28 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         )
 
         interaction.response.defer.assert_awaited_once_with(ephemeral=True)
-        # Updated to include username parameter
+        self.service.save_offer_spot_preference.assert_awaited_once_with(1234, "TestUser", 10)
         interaction.channel.send.assert_awaited_once_with("<@1234> offered spot 10!\ncreated")
         interaction.delete_original_response.assert_awaited_once()
+
+    async def test_offer_spot_autocomplete_prioritizes_saved_spot(self):
+        self.service.get_offer_spot_preference.return_value = 27
+        interaction = make_interaction()
+
+        choices = await self.cog.offer_spot_autocomplete(interaction, "2")
+
+        self.assertGreaterEqual(len(choices), 1)
+        self.assertEqual(choices[0].value, 27)
+        self.assertEqual(choices[0].name, "Spot 27 (saved)")
+        self.assertIn(27, [choice.value for choice in choices])
+
+    async def test_offer_spot_autocomplete_filters_valid_spots_when_no_saved_spot(self):
+        interaction = make_interaction()
+
+        choices = await self.cog.offer_spot_autocomplete(interaction, "46")
+
+        self.assertEqual([choice.value for choice in choices], [46])
+        self.assertEqual([choice.name for choice in choices], ["Spot 46"])
 
     async def test_claim_spot_rejects_duration_outside_limits(self):
         interaction = make_interaction()
@@ -521,6 +542,32 @@ class ParkingServiceTests(unittest.TestCase):
         end = datetime(2026, 4, 5, 11, 0, tzinfo=parking_module.LOCAL_TZ)
 
         self.assertTrue(service.is_blackout(start, end))
+
+    @patch("bot.services.parking_service.create_client")
+    def test_save_offer_spot_preference_updates_user_spot(self, create_client_mock):
+        create_client_mock.return_value = MagicMock()
+        service = ParkingService()
+        query = MagicMock()
+        query.update.return_value = query
+        query.eq.return_value = query
+        query.execute.return_value = SimpleNamespace(data=[{"spot_number": 27}])
+        service.supabase = MagicMock()
+        service.supabase.table.return_value = query
+
+        saved = asyncio.run(service.save_offer_spot_preference(1234, "TestUser", 27))
+
+        self.assertTrue(saved)
+        # Should be called twice for parking_spots
+        self.assertEqual(service.supabase.table.call_count, 2)
+        service.supabase.table.assert_called_with("parking_spots")
+        
+        # Check first update (clearing old spot)
+        self.assertEqual(query.update.call_args_list[0][0][0], {"discord_userid": None, "discord_nickname": None})
+        self.assertEqual(query.eq.call_args_list[0][0], ("discord_userid", "1234"))
+
+        # Check second update (setting new spot)
+        self.assertEqual(query.update.call_args_list[1][0][0], {"discord_userid": "1234", "discord_nickname": "TestUser"})
+        self.assertEqual(query.eq.call_args_list[1][0], ("spot_number", 27))
 
     @patch("bot.services.parking_service.create_client")
     @patch("bot.services.parking_service.datetime")

@@ -32,6 +32,7 @@ class ParkingService:
         self.supabase = supabase
         self._claim_autocomplete_cache = None
         self._cancel_autocomplete_cache = {}
+        self._offer_spot_preference_cache = {}
         self._spot_mutation_locks = {}
         self._staff_mutation_lock = asyncio.Lock()
         self._fallback_mutation_lock = asyncio.Lock()
@@ -113,7 +114,81 @@ class ParkingService:
             self._claim_autocomplete_cache = entry
             return
 
+        if cache_name == "offer_preference":
+            self._offer_spot_preference_cache[key] = entry
+            return
+
         self._cancel_autocomplete_cache[key] = entry
+
+    def _get_offer_spot_preference_sync(self, user_id):
+        """Fetch a caller's saved resident spot preference from Supabase."""
+        response = (
+            self.supabase.table("parking_spots")
+            .select("spot_number")
+            .eq("discord_userid", str(user_id))
+            .execute()
+        )
+        if response.data:
+            return response.data[0].get("spot_number")
+        return None
+
+    async def get_offer_spot_preference(self, user_id):
+        """Return a caller's saved offer-spot preference, if one exists."""
+        cache_key = str(user_id)
+        cached = self._get_cached_value(self._offer_spot_preference_cache.get(cache_key))
+        if cached is not None:
+            return cached
+
+        try:
+            spot = await self._run_blocking(
+                self._get_offer_spot_preference_sync,
+                user_id,
+                timeout=self.AUTOCOMPLETE_TIMEOUT_SECONDS,
+                log_context={"operation": "get_offer_spot_preference", "user_id": cache_key},
+            )
+            self._store_cache_value("offer_preference", cache_key, spot)
+            return spot
+        except Exception:
+            return None
+
+    def _save_offer_spot_preference_sync(self, user_id, username, spot):
+        """Upsert the caller's last used resident spot for future autocomplete."""
+        # Clear any existing spot ownership for this user
+        self.supabase.table("parking_spots").update(
+            {
+                "discord_userid": None,
+                "discord_nickname": None,
+            }
+        ).eq("discord_userid", str(user_id)).execute()
+        
+        # Set ownership on the newly offered spot
+        self.supabase.table("parking_spots").update(
+            {
+                "discord_userid": str(user_id),
+                "discord_nickname": username,
+            }
+        ).eq("spot_number", spot).execute()
+
+    async def save_offer_spot_preference(self, user_id, username, spot):
+        """Persist the caller's last successful offer spot without failing the command."""
+        cache_key = str(user_id)
+        try:
+            await self._run_blocking(
+                self._save_offer_spot_preference_sync,
+                user_id,
+                username,
+                spot,
+                timeout=10,
+                log_context={"operation": "save_offer_spot_preference", "user_id": cache_key, "spot": spot},
+            )
+            self._store_cache_value("offer_preference", cache_key, spot)
+            return True
+        except Exception:
+            logger.exception(
+                "Failed to save parking spot preference",
+                extra={"user_id": cache_key, "spot": spot},
+            )
+            return False
 
     def parse_range(self, s_day_int, s_time_str, e_day_int, e_time_str):
         """Convert weekday and hour choices into the next matching start/end datetimes."""
@@ -167,31 +242,40 @@ class ParkingService:
             logger.exception("Failed to load parking spot cache.")
 
     def _initialize_spots_sync(self):
-        # Fetch existing spots so we don't accidentally wipe is_guest status during upsert
-        existing_spots_response = self.supabase.table("parking_spots").select("spot_number, is_guest").execute()
-        existing_guest_spots = {
-            row["spot_number"] for row in existing_spots_response.data if row.get("is_guest")
+        # Fetch existing spots so we don't accidentally wipe is_guest status or user assignments during upsert
+        existing_spots_response = self.supabase.table("parking_spots").select("spot_number, is_guest, discord_userid, discord_nickname").execute()
+        
+        existing_data = {
+            row["spot_number"]: row for row in existing_spots_response.data
         }
 
         # Update the local cache while we have the fresh data
-        self.guest_spots_cache = existing_guest_spots
+        self.guest_spots_cache = {
+            spot for spot, data in existing_data.items() if data.get("is_guest")
+        }
 
         all_configs = []
         for spot in VALID_SPOTS:
+            old = existing_data.get(spot, {})
             all_configs.append(
                 {
                     "spot_number": spot,
                     "spot_type": "resident",
-                    "is_guest": spot in existing_guest_spots,
+                    "is_guest": old.get("is_guest", False),
+                    "discord_userid": old.get("discord_userid"),
+                    "discord_nickname": old.get("discord_nickname"),
                 }
             )
 
         for spot in STAFF_SPOTS:
+            old = existing_data.get(spot, {})
             all_configs.append(
                 {
                     "spot_number": spot,
                     "spot_type": "staff",
                     "is_guest": False,
+                    "discord_userid": old.get("discord_userid"),
+                    "discord_nickname": old.get("discord_nickname"),
                 }
             )
 

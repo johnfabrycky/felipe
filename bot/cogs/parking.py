@@ -89,6 +89,47 @@ class Parking(commands.Cog):
         """Ensure the configured parking spots exist in the backing database."""
         await self.service.initialize_spots()
 
+    async def offer_spot_autocomplete(
+            self,
+            interaction: discord.Interaction,
+            current: str,
+    ) -> list[app_commands.Choice[int]]:
+        """Suggest the caller's saved spot first, followed by matching valid spots."""
+        log_context = {"user_id": str(interaction.user.id), "current": current}
+
+        try:
+            saved_spot = await self.service.get_offer_spot_preference(interaction.user.id)
+            current_normalized = current.strip().lower()
+            seen_spots = set()
+            choices = []
+
+            def matches(spot_number):
+                if not current_normalized:
+                    return True
+                return current_normalized in f"spot {spot_number}".lower()
+
+            def add_choice(spot_number, label):
+                if spot_number in seen_spots or spot_number not in VALID_SPOTS or not matches(spot_number):
+                    return
+                seen_spots.add(spot_number)
+                choices.append(app_commands.Choice(name=label, value=spot_number))
+
+            if saved_spot is not None:
+                add_choice(saved_spot, f"Spot {saved_spot} (saved)")
+
+            for spot_number in VALID_SPOTS:
+                add_choice(spot_number, f"Spot {spot_number}")
+        except Exception:
+            logger.exception("Parking offer_spot autocomplete failed", extra=log_context)
+            choices = []
+
+        return await self._finalize_autocomplete(
+            interaction,
+            choices[:25],
+            handler_name="Parking offer_spot",
+            log_context=log_context,
+        )
+
     @app_commands.command(name="my_parking", description="View your active offers and reservations")
     async def my_parking(self, interaction: discord.Interaction):
         """Show the caller's active offers and reservations in one ledger."""
@@ -126,6 +167,7 @@ class Parking(commands.Cog):
 
     @app_commands.command(name="offer_spot", description="List your spot as available")
     @app_commands.choices(start_day=day_choices, end_day=day_choices, start_time=time_choices, end_time=time_choices)
+    @app_commands.autocomplete(spot=offer_spot_autocomplete)
     async def offer_spot(
             self,
             interaction: discord.Interaction,
@@ -142,7 +184,7 @@ class Parking(commands.Cog):
 
         start, end, duration = self.service.parse_range(start_day.value, start_time.value, end_day.value,
                                                         end_time.value)
-        if duration < timedelta(hours=2):
+        if duration < timedelta(hours=MINIMUM_OFFER_HOURS):
             return await interaction.response.send_message(f"❌ Offers must be at least {MINIMUM_OFFER_HOURS} hours.", ephemeral=True)
 
         await interaction.response.defer(ephemeral=True)
@@ -153,6 +195,7 @@ class Parking(commands.Cog):
             await interaction.followup.send(msg)
             return None
 
+        await self.service.save_offer_spot_preference(interaction.user.id, interaction.user.name, spot)
         await interaction.channel.send(f"<@{interaction.user.id}> offered spot {spot}!\n{msg}")
 
         await interaction.delete_original_response()
