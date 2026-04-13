@@ -367,6 +367,11 @@ class Parking(commands.Cog):
             for i, spot_num in enumerate(STAFF_SPOTS):
                 spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
                 header, blocks = self.service.get_merged_availability(now, staff_cutoff, staff_offers, spot_claims)
+                
+                if not blocks:
+                    staff_lines.append(f"**Spot {i + 1}**: ❌ Fully Booked")
+                    continue
+
                 detail = " | ".join(
                     [
                         f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
@@ -374,7 +379,7 @@ class Parking(commands.Cog):
                         for block in blocks
                     ]
                 )
-                staff_lines.append(f"**Staff Spot {i + 1}**: {header}\n- Free: {detail or 'Fully Booked'}")
+                staff_lines.append(f"**Spot {i + 1}**: {header}\n- Free: {detail}")
 
             embed = discord.Embed(
                 title="Parking Status",
