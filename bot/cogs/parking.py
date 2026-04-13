@@ -354,6 +354,9 @@ class Parking(commands.Cog):
 
                 header, blocks = self.service.get_merged_availability(now, resident_cutoff, spot_offers, spot_claims,
                                                                       is_guest)
+                if header == "❌ Not Offered":
+                    continue
+
                 detail = " | ".join(
                     [
                         f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
@@ -376,7 +379,7 @@ class Parking(commands.Cog):
                 header, blocks = self.service.get_merged_availability(now, staff_cutoff, staff_offers, spot_claims)
 
                 if not blocks:
-                    staff_lines.append(f"**Spot {i + 1}**: ❌ Fully Booked")
+                    staff_lines.append(f"**Staff Spot {i + 1}**: ❌ Fully Booked")
                     continue
 
                 detail = " | ".join(
@@ -386,7 +389,7 @@ class Parking(commands.Cog):
                         for block in blocks
                     ]
                 )
-                staff_lines.append(f"**Spot {i + 1}**: {header}\n- Free: {detail}")
+                staff_lines.append(f"**Staff Spot {i + 1}**: {header}\n- Free: {detail}")
 
             embed = discord.Embed(
                 title="Parking Status",
