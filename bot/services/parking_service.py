@@ -515,7 +515,9 @@ class ParkingService:
             self.supabase.table("parking_reservations").delete().eq("offer_id", str(record_id)).execute()
             self.supabase.table("parking_offers").delete().eq("id", str(record_id)).execute()
             pings = list({f"<@{c['claimer_id']}>" for c in claims.data})
-            return True, f"🔄 Spot {offer['spot_number']} offer withdrawn.", pings
+
+            spot_label = "Staff Spot" if offer['spot_number'] in STAFF_SPOTS else f"Spot {offer['spot_number']}"
+            return True, f"🔄 {spot_label} offer withdrawn.", pings
 
         target = (
             self.supabase.table("parking_reservations")
@@ -534,7 +536,8 @@ class ParkingService:
 
         reservation = target.data[0]
         self.supabase.table("parking_reservations").delete().eq("id", str(record_id)).execute()
-        return True, f"🔄 Reservation for Spot {reservation['spot_number']} cancelled.", None
+        spot_label = "Staff Spot" if reservation['spot_number'] in STAFF_SPOTS else f"Spot {reservation['spot_number']}"
+        return True, f"🔄 Reservation for {spot_label} cancelled.", None
 
     async def cancel_action(self, user_id, action_type, record_id):
         """Cancel one selected offer or reservation and return any affected user mentions."""
