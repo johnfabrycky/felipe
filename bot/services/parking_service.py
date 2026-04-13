@@ -266,17 +266,13 @@ class ParkingService:
             curr += timedelta(hours=1)
         return False
 
-    def get_staff_availability_windows(self, now: datetime):
-        """Return a list of non-blackout time windows for the rest of today."""
-        start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_of_day = start_of_day + timedelta(days=1)
-
+    def get_staff_availability_windows(self, start_time: datetime, end_time: datetime):
+        """Return a list of non-blackout time windows for the specified range."""
         windows = []
         current_window_start = None
         
-        # Iterate through each hour of the day
-        hour_iterator = start_of_day
-        while hour_iterator < end_of_day:
+        hour_iterator = start_time
+        while hour_iterator < end_time:
             is_in_blackout = self.is_blackout(hour_iterator, hour_iterator + timedelta(hours=1))
 
             if not is_in_blackout and current_window_start is None:
@@ -287,9 +283,8 @@ class ParkingService:
             
             hour_iterator += timedelta(hours=1)
 
-        # If the day ends and we're still in an availability window, close it.
         if current_window_start is not None:
-            windows.append({"start": current_window_start, "end": end_of_day})
+            windows.append({"start": current_window_start, "end": end_time})
 
         return windows
 
