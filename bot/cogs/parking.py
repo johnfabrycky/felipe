@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import time
 from collections import Counter
 from datetime import datetime, timedelta
@@ -364,6 +365,12 @@ class Parking(commands.Cog):
                         for block in blocks
                     ]
                 )
+                if len(blocks) == 1 and "Available Now" in header:
+                    match = re.search(r'\(until (.+)\)', header)
+                    if match and blocks[0][1].strftime('%a %I%p') == match.group(1):
+                        lines.append(f"**Spot {spot_num}**: {header}")
+                        continue
+
                 lines.append(f"**Spot {spot_num}**: {header}\n- Free: {detail or 'Fully Booked'}")
 
             # Determine staff cutoff (2 AM for Fri/Sat, 12 AM otherwise)
