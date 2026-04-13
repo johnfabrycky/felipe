@@ -358,17 +358,22 @@ class Parking(commands.Cog):
                 )
                 lines.append(f"**Spot {spot_num}**: {header}\n- Free: {detail or 'Fully Booked'}")
 
-            is_blk = self.service.is_blackout(now, now + timedelta(hours=1))
-            staff_claims = claims_db.get(STAFF_SPOTS[0], []) + claims_db.get(STAFF_SPOTS[1], [])
-            active_staff = len([claim for claim in staff_claims if claim["start"] <= now < claim["end"]])
-            if is_blk:
-                staff_status = "Closed (Blackout)"
-            else:
-                free_count = len(STAFF_SPOTS) - active_staff
-                staff_status = f"{free_count}/{len(STAFF_SPOTS)} Free"
+            staff_lines = []
+            staff_offers = self.service.get_staff_availability_windows(now)
+            for spot_num in STAFF_SPOTS:
+                spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
+                header, blocks = self.service.get_merged_availability(now, now + timedelta(days=1), staff_offers, spot_claims)
+                detail = " | ".join(
+                    [
+                        f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
+                        f"{block[0].strftime('%I%p')}-{block[1].strftime('%I%p')}"
+                        for block in blocks
+                    ]
+                )
+                staff_lines.append(f"**Staff Spot {spot_num}**: {header}\n- Free: {detail or 'Fully Booked'}")
 
             embed = discord.Embed(
-                title="Parking Status (Next 7 Days)",
+                title="Parking Status",
                 color=discord.Color.blue(),
                 timestamp=datetime.now(LOCAL_TZ),
             )
@@ -376,8 +381,12 @@ class Parking(commands.Cog):
             if len(res_value) > 1024:
                 res_value = res_value[:1020] + "..."
 
-            embed.add_field(name="Resident/Guest Spots", value=res_value, inline=False)
-            embed.add_field(name="Staff Parking", value=staff_status, inline=False)
+            staff_value = "\n".join(staff_lines)
+            if len(staff_value) > 1024:
+                staff_value = staff_value[:1020] + "..."
+
+            embed.add_field(name="Resident/Guest Spots (Next 7 Days)", value=res_value, inline=False)
+            embed.add_field(name="Staff Parking (Today)", value=staff_value, inline=False)
             embed.set_footer(text="Felipe Parking System - Chicago Time")
             self._store_cached_parking_status_embed(embed)
 
