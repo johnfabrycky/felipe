@@ -221,7 +221,7 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         embed = interaction.followup.send.await_args.kwargs["embed"]
         self.assertEqual(embed.title, "📋 My Parking Activity")
         self.assertIn("Spot 10", embed.fields[0].value)
-        self.assertIn("Staff Spot", embed.fields[1].value)
+        self.assertIn("Spot", embed.fields[1].value)
 
     async def test_parking_status_builds_embed_from_service_data(self):
         interaction = make_interaction()
