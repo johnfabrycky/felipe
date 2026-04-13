@@ -288,8 +288,8 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
 
         # Staff assertions
         self.assertEqual(embed.fields[1].name, "Staff Parking (Today)")
-        self.assertIn("**Staff Spot 1**: 🔴 Busy (Next: Mon 12PM)", embed.fields[1].value)
-        self.assertIn("**Staff Spot 2**: 🟢 Available Now (until Mon 05PM)", embed.fields[1].value)
+        self.assertIn("**Spot 1**: 🔴 Busy (Next: Mon 12PM)", embed.fields[1].value)
+        self.assertIn("**Spot 2**: 🟢 Available Now (until Mon 05PM)", embed.fields[1].value)
         self.assertNotIn("998", embed.fields[1].value)
         self.assertNotIn("999", embed.fields[1].value)
 
@@ -312,8 +312,8 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         embed = interaction.followup.send.await_args.kwargs["embed"]
 
         self.assertEqual(embed.fields[1].name, "Staff Parking (Today)")
-        self.assertIn("**Staff Spot 1**: ❌ Fully Booked", embed.fields[1].value)
-        self.assertIn("**Staff Spot 2**: ❌ Fully Booked", embed.fields[1].value)
+        self.assertIn("**Spot 1**: ❌ Fully Booked", embed.fields[1].value)
+        self.assertIn("**Spot 2**: ❌ Fully Booked", embed.fields[1].value)
         self.assertNotIn("Free:", embed.fields[1].value)
 
     async def test_parking_status_hides_unclaimable_spots(self):
