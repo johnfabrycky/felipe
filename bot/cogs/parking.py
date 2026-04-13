@@ -379,7 +379,7 @@ class Parking(commands.Cog):
                 header, blocks = self.service.get_merged_availability(now, staff_cutoff, staff_offers, spot_claims)
 
                 if not blocks:
-                    staff_lines.append(f"**Spot {i + 1}**: ❌ Fully Booked")
+                    staff_lines.append(f"**Spot {i + 1}**: {header}")
                     continue
 
                 detail = " | ".join(
