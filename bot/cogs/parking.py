@@ -116,7 +116,7 @@ class Parking(commands.Cog):
         for claim in raw_claims or []:
             start = datetime.fromisoformat(claim["start_time"]).astimezone(LOCAL_TZ)
             end = datetime.fromisoformat(claim["end_time"]).astimezone(LOCAL_TZ)
-            spot_label = "Spot" if claim["spot_number"] in STAFF_SPOTS else f"Spot {claim['spot_number']}"
+            spot_label = "Staff" if claim["spot_number"] in STAFF_SPOTS else f"Spot {claim['spot_number']}"
             time_key = f"**{spot_label}**: {start.strftime('%a %I%p')} — {end.strftime('%a %I%p')}"
             claim_groups[time_key] += 1
 
@@ -446,7 +446,7 @@ class Parking(commands.Cog):
             for claim in claims or []:
                 start = datetime.fromisoformat(claim["start_time"]).astimezone(LOCAL_TZ)
                 end = datetime.fromisoformat(claim["end_time"]).astimezone(LOCAL_TZ)
-                spot_label = "Spot" if claim["spot_number"] in STAFF_SPOTS else f"Spot {claim['spot_number']}"
+                spot_label = "Staff" if claim["spot_number"] in STAFF_SPOTS else f"Spot {claim['spot_number']}"
                 label = (
                     f"Cancel: {spot_label} "
                     f"{start.strftime('%a %b')} {start.day} {start.strftime('%I:%M %p')}"
