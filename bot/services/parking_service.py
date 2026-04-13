@@ -266,6 +266,28 @@ class ParkingService:
             curr += timedelta(hours=1)
         return False
 
+    def get_staff_availability_windows(self, start_time: datetime, end_time: datetime):
+        """Return a list of non-blackout time windows for the specified range."""
+        windows = []
+        current_window_start = None
+        
+        hour_iterator = start_time
+        while hour_iterator < end_time:
+            is_in_blackout = self.is_blackout(hour_iterator, hour_iterator + timedelta(hours=1))
+
+            if not is_in_blackout and current_window_start is None:
+                current_window_start = hour_iterator
+            elif is_in_blackout and current_window_start is not None:
+                windows.append({"start": current_window_start, "end": hour_iterator})
+                current_window_start = None
+            
+            hour_iterator += timedelta(hours=1)
+
+        if current_window_start is not None:
+            windows.append({"start": current_window_start, "end": end_time})
+
+        return windows
+
     def _get_parking_data_sync(self, now, cutoff):
         offers = (
             self.supabase.table("parking_offers")

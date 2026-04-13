@@ -303,7 +303,7 @@ class Parking(commands.Cog):
     @app_commands.command(name="parking_status", description="View available parking spots")
     @app_commands.checks.cooldown(1, 10.0, key=lambda interaction: interaction.user.id)
     async def parking_status(self, interaction: discord.Interaction):
-        """Summarize resident, guest, and staff parking availability for the next week."""
+        """Summarize resident, guest, and staff parking availability."""
         cached_embed = self._get_cached_parking_status_embed()
         if cached_embed is not None:
             await interaction.response.send_message(embed=cached_embed, ephemeral=True)
@@ -318,8 +318,8 @@ class Parking(commands.Cog):
             await interaction.response.defer(ephemeral=True)
 
             now = datetime.now(LOCAL_TZ).replace(minute=0, second=0, microsecond=0)
-            cutoff = now + timedelta(days=7)
-            raw_offers, raw_claims, guest_spots = await self.service.get_parking_data(now, cutoff)
+            resident_cutoff = now + timedelta(days=7)
+            raw_offers, raw_claims, guest_spots = await self.service.get_parking_data(now, resident_cutoff)
 
             offers_db = {}
             for row in raw_offers:
@@ -348,7 +348,7 @@ class Parking(commands.Cog):
                 spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
                 is_guest = spot_num in guest_spots
 
-                header, blocks = self.service.get_merged_availability(now, cutoff, spot_offers, spot_claims, is_guest)
+                header, blocks = self.service.get_merged_availability(now, resident_cutoff, spot_offers, spot_claims, is_guest)
                 detail = " | ".join(
                     [
                         f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
@@ -358,17 +358,26 @@ class Parking(commands.Cog):
                 )
                 lines.append(f"**Spot {spot_num}**: {header}\n- Free: {detail or 'Fully Booked'}")
 
-            is_blk = self.service.is_blackout(now, now + timedelta(hours=1))
-            staff_claims = claims_db.get(STAFF_SPOTS[0], []) + claims_db.get(STAFF_SPOTS[1], [])
-            active_staff = len([claim for claim in staff_claims if claim["start"] <= now < claim["end"]])
-            if is_blk:
-                staff_status = "Closed (Blackout)"
-            else:
-                free_count = len(STAFF_SPOTS) - active_staff
-                staff_status = f"{free_count}/{len(STAFF_SPOTS)} Free"
+            # Determine staff cutoff (2 AM for Fri/Sat, 12 AM otherwise)
+            is_weekend = now.weekday() in {4, 5}
+            staff_cutoff = now.replace(hour=2, minute=0) + timedelta(days=1) if is_weekend else now.replace(hour=0, minute=0) + timedelta(days=1)
+
+            staff_lines = []
+            staff_offers = self.service.get_staff_availability_windows(now, staff_cutoff)
+            for i, spot_num in enumerate(STAFF_SPOTS):
+                spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
+                header, blocks = self.service.get_merged_availability(now, staff_cutoff, staff_offers, spot_claims)
+                detail = " | ".join(
+                    [
+                        f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
+                        f"{block[0].strftime('%I%p')}-{block[1].strftime('%I%p')}"
+                        for block in blocks
+                    ]
+                )
+                staff_lines.append(f"**Staff Spot {i + 1}**: {header}\n- Free: {detail or 'Fully Booked'}")
 
             embed = discord.Embed(
-                title="Parking Status (Next 7 Days)",
+                title="Parking Status",
                 color=discord.Color.blue(),
                 timestamp=datetime.now(LOCAL_TZ),
             )
@@ -376,8 +385,12 @@ class Parking(commands.Cog):
             if len(res_value) > 1024:
                 res_value = res_value[:1020] + "..."
 
-            embed.add_field(name="Resident/Guest Spots", value=res_value, inline=False)
-            embed.add_field(name="Staff Parking", value=staff_status, inline=False)
+            staff_value = "\n".join(staff_lines)
+            if len(staff_value) > 1024:
+                staff_value = staff_value[:1020] + "..."
+
+            embed.add_field(name="Resident/Guest Spots (Next 7 Days)", value=res_value, inline=False)
+            embed.add_field(name="Staff Parking (Today)", value=staff_value, inline=False)
             embed.set_footer(text="Felipe Parking System - Chicago Time")
             self._store_cached_parking_status_embed(embed)
 
