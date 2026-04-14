@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 import time
 from collections import Counter
 from datetime import datetime, timedelta
@@ -10,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.config import LOCAL_TZ, STAFF_SPOTS, VALID_SPOTS, MINIMUM_RESERVATION_HOURS, MAXIMUM_RESERVATION_DAYS, \
-    MINIMUM_OFFER_HOURS
+    MINIMUM_OFFER_HOURS, BOT_NAME
 from bot.services.parking_service import ParkingService
 from bot.utils.constants import WEEKDAYS
 
@@ -356,8 +355,9 @@ class Parking(commands.Cog):
                 header, blocks = self.service.get_merged_availability(now, resident_cutoff, spot_offers, spot_claims,
                                                                       is_guest)
 
-                # If the header already contains the specific end time and there's only one block,
-                # avoid redundant "Free: NEXT..." detail lines.
+                if not is_guest and header == "❌ Not Offered":
+                    continue
+
                 if blocks is None:
                     lines.append(f"**Spot {spot_num}**: {header}")
                     continue
@@ -411,7 +411,7 @@ class Parking(commands.Cog):
 
             embed.add_field(name="Resident/Guest Spots (Next 7 Days)", value=res_value, inline=False)
             embed.add_field(name="Staff Parking (Today)", value=staff_value, inline=False)
-            embed.set_footer(text="Felipe Parking System - Chicago Time")
+            embed.set_footer(text=f"{BOT_NAME} Parking System - Chicago Time")
             self._store_cached_parking_status_embed(embed)
 
         await interaction.followup.send(embed=self._clone_embed(embed), ephemeral=True)
@@ -549,7 +549,7 @@ class Parking(commands.Cog):
             ),
             inline=False,
         )
-        embed.set_footer(text="Felipe Parking System - Chicago Time")
+        embed.set_footer(text=f"{BOT_NAME} Parking System - Chicago Time")
         await interaction.followup.send(embed=embed, ephemeral=True)
 
 
