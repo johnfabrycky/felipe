@@ -719,7 +719,10 @@ class ParkingService:
         next_block = next((block for block in blocks if block[0] > now), None)
 
         if active_block:
-            header = f"🟢 Available Now (until {active_block[1].strftime('%a %I%p')})"
+            if active_block[1] >= cutoff:
+                header = "🟢 Available Now (All Week)"
+            else:
+                header = f"🟢 Available Now (until {active_block[1].strftime('%a %I%p')})"
         elif current_claim:
             if next_block:
                 header = f"🔴 Busy (Next: {next_block[0].strftime('%a %I%p')})"
