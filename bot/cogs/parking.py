@@ -362,14 +362,17 @@ class Parking(commands.Cog):
                     lines.append(f"**Spot {spot_num}**: {header}")
                     continue
 
-                detail = "\n- ".join(
-                    [
-                        f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
-                        f"{block[0].strftime('%a %I%p')}-{block[1].strftime('%a %I%p')}"
-                        for block in blocks
-                    ]
-                )
-                lines.append(f"**Spot {spot_num}**: {header}\n- Free: {detail}")
+                # Filter out the currently active block so it doesn't duplicate the header
+                future_blocks = [block for block in blocks if not (block[0] <= now < block[1])]
+
+                if not future_blocks:
+                    lines.append(f"**Spot {spot_num}**: {header}")
+                else:
+                    detail = "\n".join(
+                        [f"- NEXT {block[0].strftime('%a %I%p')}-{block[1].strftime('%a %I%p')}" for block in
+                         future_blocks]
+                    )
+                    lines.append(f"**Spot {spot_num}**: {header}\n{detail}")
 
             # Determine staff cutoff (2 AM for Fri/Sat, 12 AM otherwise)
             is_weekend = now.weekday() in {4, 5}
@@ -387,14 +390,16 @@ class Parking(commands.Cog):
                     staff_lines.append(f"**Spot {i + 1}**: {header}")
                     continue
 
-                detail = "\n- ".join(
-                    [
-                        f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
-                        f"{block[0].strftime('%I%p')}-{block[1].strftime('%I%p')}"
-                        for block in blocks
-                    ]
-                )
-                staff_lines.append(f"**Spot {i + 1}**: {header}\n- Free: {detail}")
+                # Filter out the currently active block for staff as well
+                future_blocks = [block for block in blocks if not (block[0] <= now < block[1])]
+
+                if not future_blocks:
+                    staff_lines.append(f"**Spot {i + 1}**: {header}")
+                else:
+                    detail = "\n".join(
+                        [f"- NEXT {block[0].strftime('%I%p')}-{block[1].strftime('%I%p')}" for block in future_blocks]
+                    )
+                    staff_lines.append(f"**Spot {i + 1}**: {header}\n{detail}")
 
             embed = discord.Embed(
                 title="Parking Status",
