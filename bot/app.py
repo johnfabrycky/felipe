@@ -180,7 +180,7 @@ async def audit_latency(ctx):
         if bot.supabase is None:
             raise ValueError("Supabase client not initialized")
 
-        await bot.supabase.table("parking").select("*").limit(1).execute()
+        await bot.supabase.table("parking_offers").select("*").limit(1).execute()
         db_end = time.perf_counter()
         db_lat = round((db_end - db_start) * 1000)
         db_status = f"{db_lat}ms"
