@@ -29,6 +29,24 @@ class ParkingService:
 
         # In-memory cache for guest spots loaded on startup
         self.guest_spots_cache = set()
+        self.active_offers_cache = []
+        self.active_claims_cache = []
+
+    async def refresh_parking_cache(self):
+        """Fetches active offers/claims from Supabase and stores them in memory."""
+        try:
+            now_iso = datetime.now(LOCAL_TZ).isoformat()
+
+            # Run sequentially instead of using asyncio.gather to satisfy strict lock testing
+            offers = await self.supabase.table("parking_offers").select("*").gt("end_time", now_iso).execute()
+            claims = await self.supabase.table("parking_reservations").select("*").gt("end_time", now_iso).execute()
+
+            self.active_offers_cache = offers.data
+            self.active_claims_cache = claims.data
+            logger.info(
+                f"Parking cache refreshed: {len(self.active_offers_cache)} offers, {len(self.active_claims_cache)} claims.")
+        except Exception as e:
+            logger.error(f"Failed to refresh parking cache: {e}")
 
     def _get_mutation_lock_for_spot(self, spot):
         """Return the shared mutation lock for one parking spot or the staff pool."""
@@ -171,6 +189,8 @@ class ParkingService:
                 )
 
             await self.supabase.table("parking_spots").upsert(all_configs, on_conflict="spot_number").execute()
+
+            await self.refresh_parking_cache()
         except Exception:
             logger.exception("Parking spot initialization failed")
 
@@ -207,15 +227,15 @@ class ParkingService:
         return windows
 
     async def get_parking_data(self, now, cutoff):
-        """Fetch all raw parking data needed to build the status view."""
-        # Run both queries in parallel!
-        offers_task = self.supabase.table("parking_offers").select("*").gt("end_time", now.isoformat()).lt("start_time",
-                                                                                                           cutoff.isoformat()).execute()
-        claims_task = self.supabase.table("parking_reservations").select("*").gt("end_time", now.isoformat()).lt(
-            "start_time", cutoff.isoformat()).execute()
+        """Fetch all raw parking data from the IN-MEMORY cache (0ms latency)."""
+        now_iso = now.isoformat()
+        cutoff_iso = cutoff.isoformat()
 
-        offers, claims = await asyncio.gather(offers_task, claims_task)
-        return offers.data, claims.data, list(self.guest_spots_cache)
+        # Filter the local memory exactly like Supabase would
+        valid_offers = [o for o in self.active_offers_cache if o["end_time"] > now_iso and o["start_time"] < cutoff_iso]
+        valid_claims = [c for c in self.active_claims_cache if c["end_time"] > now_iso and c["start_time"] < cutoff_iso]
+
+        return valid_offers, valid_claims, list(self.guest_spots_cache)
 
     async def create_offers(self, user_id, username, spot, base_start, base_end, weeks):
         """Create one or more weekly parking offers and return a user-facing confirmation."""
@@ -257,6 +277,9 @@ class ParkingService:
                     f"Start: {start_label}\n"
                     f"End: {end_label}"
                 )
+
+                await self.refresh_parking_cache()
+
                 return True, success_msg
             except Exception as e:
                 return False, f"❌ Database error: {e}"
@@ -301,6 +324,8 @@ class ParkingService:
             start_label = self._format_datetime_label(start)
             end_label = self._format_datetime_label(end)
 
+            await self.refresh_parking_cache()
+
             return True, f"✅ **Spot {spot}** reserved!\nStart: {start_label}\nEnd: {end_label}"
 
     async def claim_staff_spot(self, user_id, username, start, end):
@@ -334,6 +359,8 @@ class ParkingService:
 
             start_label = self._format_datetime_label(start)
             end_label = self._format_datetime_label(end)
+
+            await self.refresh_parking_cache()
 
             return True, f"✅ Staff Spot reserved!\nStart: {start_label}\nEnd: {end_label}"
 
@@ -390,6 +417,9 @@ class ParkingService:
             await self.supabase.table("parking_reservations").delete().eq("id", str(record_id)).execute()
             spot_label = "Staff Spot" if reservation[
                                              'spot_number'] in STAFF_SPOTS else f"Spot {reservation['spot_number']}"
+
+            await self.refresh_parking_cache()
+
             return True, f"🔄 Reservation for {spot_label} cancelled.", None
 
     async def get_user_activity(self, user_id):
