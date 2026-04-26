@@ -357,9 +357,10 @@ class Parking(commands.Cog):
                 spot_offers = offers_db.get(spot_num, [])
                 spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
                 is_guest = spot_num in guest_spots
+                is_resident = not (spot_num == 998 or spot_num == 999)
 
                 header, blocks = self.service.get_merged_availability(now, resident_cutoff, spot_offers, spot_claims,
-                                                                      is_guest)
+                                                                      is_guest, is_resident)
 
                 if not is_guest and header == "❌ Not Offered":
                     continue
@@ -368,14 +369,17 @@ class Parking(commands.Cog):
                     lines.append(f"**Spot {spot_num}**: {header}")
                     continue
 
-                detail = " | ".join(
-                    [
-                        f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
-                        f"{block[0].strftime('%a %I%p')}-{block[1].strftime('%a %I%p')}"
-                        for block in blocks
-                    ]
-                )
-                lines.append(f"**Spot {spot_num}**: {header}\n- Free: {detail}")
+                # Filter out the currently active block so it doesn't duplicate the header
+                future_blocks = [block for block in blocks if not (block[0] <= now < block[1])]
+
+                if not future_blocks:
+                    lines.append(f"**Spot {spot_num}**: {header}")
+                else:
+                    detail = "\n".join(
+                        [f"- NEXT {block[0].strftime('%a %I%p')}-{block[1].strftime('%a %I%p')}" for block in
+                         future_blocks]
+                    )
+                    lines.append(f"**Spot {spot_num}**: {header}\n{detail}")
 
             # Determine staff cutoff (2 AM for Fri/Sat, 12 AM otherwise)
             is_weekend = now.weekday() in {4, 5}
@@ -387,20 +391,22 @@ class Parking(commands.Cog):
             staff_offers = self.service.get_staff_availability_windows(now, staff_cutoff)
             for i, spot_num in enumerate(STAFF_SPOTS):
                 spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
-                header, blocks = self.service.get_merged_availability(now, staff_cutoff, staff_offers, spot_claims)
+                header, blocks = self.service.get_merged_availability(now, staff_cutoff, staff_offers, spot_claims, is_resident=False)
 
                 if not blocks:
                     staff_lines.append(f"**Spot {i + 1}**: {header}")
                     continue
 
-                detail = " | ".join(
-                    [
-                        f"{'NOW' if block[0] <= now < block[1] else 'NEXT'} "
-                        f"{block[0].strftime('%I%p')}-{block[1].strftime('%I%p')}"
-                        for block in blocks
-                    ]
-                )
-                staff_lines.append(f"**Spot {i + 1}**: {header}\n- Free: {detail}")
+                # Filter out the currently active block for staff as well
+                future_blocks = [block for block in blocks if not (block[0] <= now < block[1])]
+
+                if not future_blocks:
+                    staff_lines.append(f"**Spot {i + 1}**: {header}")
+                else:
+                    detail = "\n".join(
+                        [f"- NEXT {block[0].strftime('%I%p')}-{block[1].strftime('%I%p')}" for block in future_blocks]
+                    )
+                    staff_lines.append(f"**Spot {i + 1}**: {header}\n{detail}")
 
             embed = discord.Embed(
                 title="Parking Status",

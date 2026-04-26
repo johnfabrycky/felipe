@@ -449,7 +449,7 @@ class ParkingService:
             return "None"
         return ", ".join(map(str, sorted(self.guest_spots_cache)))
 
-    def get_merged_availability(self, now, cutoff, raw_offers, raw_claims, is_guest=False):
+    def get_merged_availability(self, now, cutoff, raw_offers, raw_claims, is_guest=False, is_resident=True):
         """Merge offer windows, subtract claims, and return a status header plus free blocks."""
         if is_guest:
             merged_windows = [{"start": now.replace(hour=0), "end": cutoff}]
@@ -495,7 +495,12 @@ class ParkingService:
 
         if active_block:
             if active_block[1] >= cutoff:
-                header = "🟢 Available Now (All Week)"
+                if not is_resident:
+                    # Staff spots reset at 12 AM (Sun-Thu) or 2 AM (Fri-Sat)
+                    reset_time_string = "Sun 2 AM"  if (now.weekday() == 4 or now.weekday() == 5 or (now.weekday() == 6 and now.hour < 2)) else "12 AM"
+                    header = f"🟢 Available Now (until {reset_time_string})"
+                else:
+                    header = "🟢 Available Now (All Week)"
             else:
                 header = f"🟢 Available Now (until {active_block[1].strftime('%a %I%p')})"
         elif current_claim:
