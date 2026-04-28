@@ -59,7 +59,16 @@ requests.
 
 ## 🖼️ Visuals
 
-*(Placeholder for screenshots or GIFs of the bot in action)*
+Offer spot
+![offer_spot.png](../../Pictures/Screenshots/offer_spot.png)
+Offer spot confirmation
+![offer_spot_confirmation.png](../../Pictures/Screenshots/offer_spot_confirmation.png)
+Claim spot
+![claim_spot.png](../../Pictures/Screenshots/claim_spot.png)
+Claim spot confirmation
+![claim_spot_confirmation.png](../../Pictures/Screenshots/claim_spot_confirmation.png)
+My parking
+![my_parking.png](../../Pictures/Screenshots/my_parking.png)
 
 ## 🤖 Bot Invitation
 
