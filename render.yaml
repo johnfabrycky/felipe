@@ -1,0 +1,12 @@
+services:
+  - type: web_service
+    name: kss-discord-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: RENDER_SERVICE_ID
+        sync: FALSE
+      - key: RENDER_API_KEY
+        sync: FALSE
