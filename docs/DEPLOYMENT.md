@@ -32,6 +32,13 @@ This guide explains how to deploy and run the Discord bot, both locally for deve
    ```
    You can find the Supabase URL and service key in your Supabase project settings.
 
+4. **Set up the database:**
+   In your Supabase project, go to the "SQL Editor" and run the SQL scripts located in the `docs/sql/` directory in the following order:
+    1. `01_parking.sql`
+    2. `02_meals.sql`
+    3. `03_lates.sql`
+    4. `04_feedback.sql`
+
 ### 3. Running the Bot
 
 Once the setup is complete, you can run the bot using the following command:
