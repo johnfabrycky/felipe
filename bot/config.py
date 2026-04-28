@@ -1,10 +1,10 @@
 """Central runtime configuration for the Discord bot."""
-from dotenv import load_dotenv
+import os
 from pathlib import Path
 
 import discord
 import pytz
-import os
+from dotenv import load_dotenv
 
 load_dotenv()
 
