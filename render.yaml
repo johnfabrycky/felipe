@@ -10,3 +10,11 @@ services:
         sync: FALSE
       - key: RENDER_API_KEY
         sync: FALSE
+      - key: DISCORD_TOKEN
+        sync: FALSE
+      - key: SUPABASE_RULE
+        sync: FALSE
+      - key: SUPABASE_SERVICE_KEY
+        sync: FALSE
+      - key: HEALTHCHECK_URL
+        sync: FALSE
