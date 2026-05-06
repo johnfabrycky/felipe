@@ -17,7 +17,7 @@ class GeminiChat(commands.Cog):
             genai.configure(api_key=self.api_key)
             # Using the gemini-1.5-flash model (available on the free tier)
             self.model = genai.GenerativeModel(
-                'gemini-2.5-flash',
+                'gemma-3-1b-it',
                 system_instruction=(
                     "Right now someone has pinged you. Only respond with 'yes' or 'no'."
                 )
