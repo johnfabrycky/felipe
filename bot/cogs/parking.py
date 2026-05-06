@@ -743,7 +743,9 @@ class Parking(commands.Cog):
                 start_ampm = "AM" if start_hr < NOON else "PM"
                 end_hour = end_hr % NOON or NOON
                 end_ampm = "AM" if end_hr < NOON else "PM"
-                lines.append(f"• {day_str}: {start_hour} {start_ampm} - {end_hour} {end_ampm}")
+                lines.append(
+                    f"• {day_str}: {start_hour} {start_ampm} - {end_hour} {end_ampm}"
+                )
             return "\n".join(lines)
 
         guest_list_str = await self.service.get_guest_spot_list()

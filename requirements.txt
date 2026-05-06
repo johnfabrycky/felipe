@@ -8,3 +8,4 @@ pandas
 supabase
 python-dateutil
 httpx
+pytest
