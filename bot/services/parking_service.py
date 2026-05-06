@@ -335,8 +335,7 @@ class ParkingService:
                 offer_id = offer.data[0]["id"]
 
             (
-                await
-                ( self.supabase.table("parking_reservations")
+                await self.supabase.table("parking_reservations")
                 .insert(
                     {
                         "spot_number": int(spot),
@@ -348,7 +347,6 @@ class ParkingService:
                     }
                 )
                 .execute()
-                )
             )
 
             start_label = self._format_datetime_label(start)
@@ -638,7 +636,10 @@ class ParkingService:
                         if (
                             now.weekday() == FR.weekday
                             or now.weekday() == SA.weekday
-                            or (now.weekday() == SU.weekday and now.hour < WEEKEND_GUEST_HOURS_END)
+                            or (
+                                now.weekday() == SU.weekday
+                                and now.hour < WEEKEND_GUEST_HOURS_END
+                            )
                         )
                         else "12 AM"
                     )

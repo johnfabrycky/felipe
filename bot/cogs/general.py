@@ -14,7 +14,9 @@ class General(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="help", description="List all available commands and bot info")
+    @app_commands.command(
+        name="help", description="List all available commands and bot info"
+    )
     async def help_command(self, interaction: discord.Interaction):
         """Show a categorized summary of the bot's currently exposed commands."""
         embed = discord.Embed(
@@ -49,7 +51,9 @@ class General(commands.Cog):
             if self.bot.supabase is None:
                 raise ValueError("Supabase client not initialized")
 
-            await self.bot.supabase.table("parking_offers").select("*").limit(1).execute()
+            await (
+                self.bot.supabase.table("parking_offers").select("*").limit(1).execute()
+            )
             db_end = time.perf_counter()
             db_lat = round((db_end - db_start) * 1000)
             db_status = f"{db_lat}ms"
@@ -89,7 +93,9 @@ class General(commands.Cog):
         """Clear globally registered commands to remove stale slash-command entries."""
         self.bot.tree.clear_commands(guild=None)
         await self.bot.tree.sync()
-        await ctx.send("👻 Ghost commands cleared! The duplicate should vanish shortly.")
+        await ctx.send(
+            "👻 Ghost commands cleared! The duplicate should vanish shortly."
+        )
 
 
 async def setup(bot: commands.Bot):

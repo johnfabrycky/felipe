@@ -89,6 +89,7 @@ class Bot(commands.Bot):
 
 bot = Bot()
 
+
 @bot.tree.error
 async def on_app_command_error(
     interaction: discord.Interaction, error: app_commands.AppCommandError
@@ -110,10 +111,13 @@ async def on_app_command_error(
                 "retry_after_seconds": retry_after,
             },
         )
-        message_to_send = f"Please wait {retry_after}s before using `/{command_name}` again."
-    elif isinstance(
-        original := getattr(error, "original", error), discord.HTTPException
-    ) and original.status == 429:
+        message_to_send = (
+            f"Please wait {retry_after}s before using `/{command_name}` again."
+        )
+    elif (
+        isinstance(original := getattr(error, "original", error), discord.HTTPException)
+        and original.status == 429
+    ):
         logger.warning(
             "Discord rate limited app command response",
             extra={

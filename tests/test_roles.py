@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 from bot.services.roles_service import RolesService
 
+
 @pytest.fixture
 def mock_supabase():
     # Create a deep mock of the Supabase client chain
@@ -10,9 +11,11 @@ def mock_supabase():
     supabase.table.return_value.upsert.return_value.execute = AsyncMock()
     return supabase
 
+
 @pytest.fixture
 def service(mock_supabase):
     return RolesService(mock_supabase)
+
 
 @pytest.mark.asyncio
 async def test_update_resident_status_success(mock_supabase, service):
@@ -23,19 +26,20 @@ async def test_update_resident_status_success(mock_supabase, service):
 
     # Act
     result = await service.update_resident_status(
-        discord_id=123456789,
-        username="TestUser",
-        role_slug="koinonian"
+        discord_id=123456789, username="TestUser", role_slug="koinonian"
     )
 
     # Assert
     assert result is True
     mock_supabase.table.assert_called_with("residents")
-    mock_supabase.table().upsert.assert_called_with({
-        "discord_id": "123456789",
-        "username": "TestUser",
-        "community_role": "koinonian"
-    })
+    mock_supabase.table().upsert.assert_called_with(
+        {
+            "discord_id": "123456789",
+            "username": "TestUser",
+            "community_role": "koinonian",
+        }
+    )
+
 
 @pytest.mark.asyncio
 async def test_update_resident_status_alumni_with_email(mock_supabase, service):
@@ -49,17 +53,20 @@ async def test_update_resident_status_alumni_with_email(mock_supabase, service):
         discord_id=987654321,
         username="AlumniUser",
         role_slug="alumni",
-        email="alumni@example.com"
+        email="alumni@example.com",
     )
 
     # Assert
     assert result is True
-    mock_supabase.table().upsert.assert_called_with({
-        "discord_id": "987654321",
-        "username": "AlumniUser",
-        "community_role": "alumni",
-        "email": "alumni@example.com"
-    })
+    mock_supabase.table().upsert.assert_called_with(
+        {
+            "discord_id": "987654321",
+            "username": "AlumniUser",
+            "community_role": "alumni",
+            "email": "alumni@example.com",
+        }
+    )
+
 
 @pytest.mark.asyncio
 async def test_update_resident_status_failure(mock_supabase, service):
@@ -70,9 +77,7 @@ async def test_update_resident_status_failure(mock_supabase, service):
 
     # Act
     result = await service.update_resident_status(
-        discord_id=111,
-        username="FailUser",
-        role_slug="suttonite"
+        discord_id=111, username="FailUser", role_slug="suttonite"
     )
 
     # Assert

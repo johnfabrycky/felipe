@@ -726,6 +726,7 @@ class ParkingServiceTests(unittest.TestCase):
             def gt(self, field, value):
                 self.filters.append((field, ("gt", value)))
                 return self
+
             async def execute(self):
                 rows = list(self.store[self.name])
                 for field, value in self.filters:

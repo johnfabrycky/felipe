@@ -10,7 +10,12 @@ from bot.services.roles_service import RolesService
 
 logger = logging.getLogger(__name__)
 
-from bot.config import KOINONIAN_ROLE_ID, STRATFORDITE_ROLE_ID, ALUMNI_ROLE_ID, SUTTONITE_ROLE_ID
+from bot.config import (
+    KOINONIAN_ROLE_ID,
+    STRATFORDITE_ROLE_ID,
+    ALUMNI_ROLE_ID,
+    SUTTONITE_ROLE_ID,
+)
 
 # --- UI Components ---
 
