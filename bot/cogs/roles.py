@@ -187,4 +187,42 @@ class CommunityView(discord.ui.View):
         self.add_item(CommunitySelect(service))
 
 
-# ---
+# --- The Cog ---
+
+
+class Roles(commands.Cog):
+    """Handles role assignments and directory synchronization."""
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.service = RolesService(bot.supabase)
+
+    async def cog_load(self):
+        """Register the persistent view on startup."""
+        self.bot.add_view(CommunityView(self.service))
+        logger.info("Persistent CommunityView loaded.")
+
+    @app_commands.command(
+        name="spawn_role_menu",
+        description="[Admin] Spawns the persistent role selection menu in the current channel.",
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def spawn_role_menu(self, interaction: discord.Interaction):
+        """Admin command to drop the persistent UI into a designated channel."""
+        # 1. Immediately acknowledge the interaction to prevent the 3-second timeout
+        await interaction.response.defer(ephemeral=True)
+
+        embed = discord.Embed(
+            title="Community Selection",
+            description="Please select your current status using the dropdown below. Choosing a new status will automatically remove your old one.\n\n*If you are moving on, select **Alumni**!*",
+            color=discord.Color.blurple(),
+        )
+
+        # 2. Send the actual menu to the channel
+        await interaction.channel.send(embed=embed, view=CommunityView(self.service))
+
+        # 3. Use .followup.send() for the confirmation since we already deferred
+        await interaction.followup.send("✅ Menu spawned successfully.", ephemeral=True)
+
+async def setup(bot):
+    await bot.add_cog(Roles(bot))
