@@ -177,15 +177,20 @@ class Roles(commands.Cog):
     @app_commands.default_permissions(administrator=True)
     async def spawn_role_menu(self, interaction: discord.Interaction):
         """Admin command to drop the persistent UI into a designated channel."""
+        # 1. Immediately acknowledge the interaction to prevent the 3-second timeout
+        await interaction.response.defer(ephemeral=True)
+
         embed = discord.Embed(
             title="Community Selection",
             description="Please select your current status using the dropdown below. Choosing a new status will automatically remove your old one.\n\n*If you are moving on, select **Alumni**!*",
             color=discord.Color.blurple(),
         )
+
+        # 2. Send the actual menu to the channel
         await interaction.channel.send(embed=embed, view=CommunityView(self.service))
-        await interaction.response.send_message(
-            "✅ Menu spawned successfully.", ephemeral=True
-        )
+
+        # 3. Use .followup.send() for the confirmation since we already deferred
+        await interaction.followup.send("✅ Menu spawned successfully.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(Roles(bot))
