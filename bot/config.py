@@ -20,6 +20,7 @@ EXTENSIONS = [
     "bot.cogs.parking",
     "bot.cogs.general",
     "bot.cogs.feedback",
+    "bot.cogs.roles",
 ]
 LOCAL_TZ = pytz.timezone("America/Chicago")
 
