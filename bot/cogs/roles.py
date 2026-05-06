@@ -1,21 +1,20 @@
 import logging
+from datetime import datetime, timezone, timedelta
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from bot.services.roles_service import RolesService
-# Assuming you have a config file for role IDs like in lates.py
-# from bot.config import ROLE_IDS
-
-logger = logging.getLogger(__name__)
-
 from bot.config import (
     KOINONIAN_ROLE_ID,
     STRATFORDITE_ROLE_ID,
     ALUMNI_ROLE_ID,
     SUTTONITE_ROLE_ID,
+    RA_LOG_CHANNEL_ID,  # Ensure this is defined in your config.py
 )
+
+logger = logging.getLogger(__name__)
 
 # --- UI Components ---
 
@@ -51,6 +50,13 @@ class AlumniEmailModal(discord.ui.Modal, title="Alumni Network"):
                 msg = f"✅ You are now an Alumni! We'll keep in touch at `{provided_email}`."
             else:
                 msg = "✅ You are now an Alumni! Your status has been updated."
+
+            # --- AUDIT LOG ---
+            log_channel = interaction.guild.get_channel(RA_LOG_CHANNEL_ID)
+            if log_channel:
+                await log_channel.send(
+                    f"🎓 **Role Update:** {interaction.user.mention} just assigned themselves **Alumni**."
+                )
         else:
             msg = "⚠️ Your Discord role was updated, but we couldn't save your status to the database."
 
@@ -97,6 +103,24 @@ class CommunitySelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        # --- RATE LIMIT CHECK ---
+        last_update_str = await self.service.get_last_update(interaction.user.id)
+
+        # Bypass the rate limit if the user is a server Administrator
+        if last_update_str and not interaction.user.guild_permissions.administrator:
+            last_update = datetime.fromisoformat(last_update_str)
+            now = datetime.now(timezone.utc)
+            time_since = now - last_update
+
+            if time_since < timedelta(days=30):
+                days_left = 30 - time_since.days
+                return await interaction.response.send_message(
+                    f"⏳ **Rate Limited:** To prevent house snooping, you can only change your community role once every 30 days.\n\n"
+                    f"You can change it again in **{days_left} days**. If you made a mistake, please ping an RA or Server Admin to manually fix your roles.",
+                    ephemeral=True,
+                )
+        # --- END RATE LIMIT CHECK ---
+
         # Replace these integers with your actual server role IDs
         role_map = {
             "koinonian": interaction.guild.get_role(KOINONIAN_ROLE_ID),
@@ -140,6 +164,14 @@ class CommunitySelect(discord.ui.Select):
                     f"✅ You have been assigned the **{selected_role.name}** role!",
                     ephemeral=True,
                 )
+
+                # --- AUDIT LOG ---
+                log_channel = interaction.guild.get_channel(RA_LOG_CHANNEL_ID)
+                if log_channel:
+                    await log_channel.send(
+                        f"🔄 **Role Update:** {interaction.user.mention} just assigned themselves the **{selected_role.name}** role."
+                    )
+
             else:
                 await interaction.response.send_message(
                     f"⚠️ Assigned **{selected_role.name}**, but failed to sync to the directory.",
@@ -155,42 +187,4 @@ class CommunityView(discord.ui.View):
         self.add_item(CommunitySelect(service))
 
 
-# --- The Cog ---
-
-
-class Roles(commands.Cog):
-    """Handles role assignments and directory synchronization."""
-
-    def __init__(self, bot):
-        self.bot = bot
-        self.service = RolesService(bot.supabase)
-
-    async def cog_load(self):
-        """Register the persistent view on startup."""
-        self.bot.add_view(CommunityView(self.service))
-        logger.info("Persistent CommunityView loaded.")
-
-    @app_commands.command(
-        name="spawn_role_menu",
-        description="[Admin] Spawns the persistent role selection menu in the current channel.",
-    )
-    @app_commands.default_permissions(administrator=True)
-    async def spawn_role_menu(self, interaction: discord.Interaction):
-        """Admin command to drop the persistent UI into a designated channel."""
-        # 1. Immediately acknowledge the interaction to prevent the 3-second timeout
-        await interaction.response.defer(ephemeral=True)
-
-        embed = discord.Embed(
-            title="Community Selection",
-            description="Please select your current status using the dropdown below. Choosing a new status will automatically remove your old one.\n\n*If you are moving on, select **Alumni**!*",
-            color=discord.Color.blurple(),
-        )
-
-        # 2. Send the actual menu to the channel
-        await interaction.channel.send(embed=embed, view=CommunityView(self.service))
-
-        # 3. Use .followup.send() for the confirmation since we already deferred
-        await interaction.followup.send("✅ Menu spawned successfully.", ephemeral=True)
-
-async def setup(bot):
-    await bot.add_cog(Roles(bot))
+# ---
