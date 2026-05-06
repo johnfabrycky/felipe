@@ -19,9 +19,7 @@ class GeminiChat(commands.Cog):
             self.model = genai.GenerativeModel(
                 'gemini-1.5-flash',
                 system_instruction=(
-                    "You are Felipe, a witty, slightly sarcastic, and hilarious Discord bot for the KSS community. "
-                    "Your main job is managing parking and meals, but right now someone just pinged you. "
-                    "Respond to their prompt in a funny, witty, and entertaining way. Keep it brief (1-3 sentences)."
+                    "Right now someone has pinged you. Only respond with 'yes' or 'no'."
                 )
             )
         else:
