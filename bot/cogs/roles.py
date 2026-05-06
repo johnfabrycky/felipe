@@ -30,14 +30,26 @@ class AlumniEmailModal(discord.ui.Modal, title="Alumni Network"):
         max_length=100,
     )
 
-    def __init__(self, service: RolesService):
+    def __init__(
+        self, service: RolesService, roles_to_remove: list, alumni_role: discord.Role
+    ):
         super().__init__()
         self.service = service
+        self.roles_to_remove = roles_to_remove
+        self.alumni_role = alumni_role
 
     async def on_submit(self, interaction: discord.Interaction):
+        # 1. Immediately defer so we have 15 minutes to do API calls safely
+        await interaction.response.defer(ephemeral=True)
+
         provided_email = self.email.value.strip() or None
 
-        # Write to database
+        # 2. Swap the Discord roles now that we are safe from timeouts
+        if self.roles_to_remove:
+            await interaction.user.remove_roles(*self.roles_to_remove)
+        await interaction.user.add_roles(self.alumni_role)
+
+        # 3. Write to database
         success = await self.service.update_resident_status(
             discord_id=interaction.user.id,
             username=interaction.user.display_name,
@@ -60,7 +72,8 @@ class AlumniEmailModal(discord.ui.Modal, title="Alumni Network"):
         else:
             msg = "⚠️ Your Discord role was updated, but we couldn't save your status to the database."
 
-        await interaction.response.send_message(msg, ephemeral=True)
+        # 4. Use followup since we deferred
+        await interaction.followup.send(msg, ephemeral=True)
 
 
 class CommunitySelect(discord.ui.Select):
@@ -99,14 +112,13 @@ class CommunitySelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="persistent_community_select",  # Required for persistence
+            custom_id="persistent_community_select",
         )
 
     async def callback(self, interaction: discord.Interaction):
-        # --- RATE LIMIT CHECK ---
+        # --- RATE LIMIT CHECK (Usually very fast) ---
         last_update_str = await self.service.get_last_update(interaction.user.id)
 
-        # Bypass the rate limit if the user is a server Administrator
         if last_update_str and not interaction.user.guild_permissions.administrator:
             last_update = datetime.fromisoformat(last_update_str)
             now = datetime.now(timezone.utc)
@@ -121,7 +133,6 @@ class CommunitySelect(discord.ui.Select):
                 )
         # --- END RATE LIMIT CHECK ---
 
-        # Replace these integers with your actual server role IDs
         role_map = {
             "koinonian": interaction.guild.get_role(KOINONIAN_ROLE_ID),
             "stratfordite": interaction.guild.get_role(STRATFORDITE_ROLE_ID),
@@ -137,43 +148,46 @@ class CommunitySelect(discord.ui.Select):
                 "❌ Configuration error: Role not found on the server.", ephemeral=True
             )
 
-        # 1. Mutually Exclusive Logic: Strip old house/alumni roles
         roles_to_remove = [
             r for r in role_map.values() if r and r in interaction.user.roles
         ]
-        if roles_to_remove:
-            await interaction.user.remove_roles(*roles_to_remove)
 
-        # 2. Assign the new role
-        await interaction.user.add_roles(selected_role)
-
-        # 3. Route the interaction based on selection
+        # --- BRANCH LOGIC ---
         if selected_slug == "alumni":
-            # Fire the modal (the DB write happens inside the modal's on_submit)
-            await interaction.response.send_modal(AlumniEmailModal(self.service))
+            # Pass the role mapping into the modal and launch it immediately
+            modal = AlumniEmailModal(self.service, roles_to_remove, selected_role)
+            await interaction.response.send_modal(modal)
+
         else:
-            # For standard houses, write to DB immediately and confirm
+            # For standard houses, defer immediately to beat the 3-second clock
+            await interaction.response.defer(ephemeral=True)
+
+            # Do the heavy API lifting
+            if roles_to_remove:
+                await interaction.user.remove_roles(*roles_to_remove)
+            await interaction.user.add_roles(selected_role)
+
+            # Write to DB
             success = await self.service.update_resident_status(
                 discord_id=interaction.user.id,
                 username=interaction.user.display_name,
                 role_slug=selected_slug,
             )
 
+            # Followup response
             if success:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"✅ You have been assigned the **{selected_role.name}** role!",
                     ephemeral=True,
                 )
 
-                # --- AUDIT LOG ---
                 log_channel = interaction.guild.get_channel(RA_LOG_CHANNEL_ID)
                 if log_channel:
                     await log_channel.send(
                         f"🔄 **Role Update:** {interaction.user.mention} just assigned themselves the **{selected_role.name}** role."
                     )
-
             else:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"⚠️ Assigned **{selected_role.name}**, but failed to sync to the directory.",
                     ephemeral=True,
                 )
