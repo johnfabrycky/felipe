@@ -48,8 +48,8 @@ class Parking(commands.Cog):
         """Initialize the parking cog and its shared service layer."""
         self.bot = bot
         self.service = ParkingService(bot.supabase)
-        self._parking_status_cache = None
-        self._parking_status_cache_expires_at = 0.0
+        self._parking_status_cache = {}
+        self._parking_status_cache_expires_at = {}
         self._parking_status_lock = asyncio.Lock()
 
     async def cog_load(self):
@@ -63,19 +63,18 @@ class Parking(commands.Cog):
         """Create a detached embed copy safe to reuse across interactions."""
         return discord.Embed.from_dict(embed.to_dict())
 
-    def _get_cached_parking_status_embed(self):
+    def _get_cached_parking_status_embed(self, level="default"):
         """Return the cached parking-status embed while it is still fresh."""
-        if (
-            self._parking_status_cache is None
-            or time.monotonic() >= self._parking_status_cache_expires_at
-        ):
+        expires_at = self._parking_status_cache_expires_at.get(level, 0.0)
+        embed = self._parking_status_cache.get(level)
+        if embed is None or time.monotonic() >= expires_at:
             return None
-        return self._clone_embed(self._parking_status_cache)
+        return self._clone_embed(embed)
 
-    def _store_cached_parking_status_embed(self, embed):
+    def _store_cached_parking_status_embed(self, embed, level="default"):
         """Store a short-lived parking-status embed to absorb burst traffic."""
-        self._parking_status_cache = self._clone_embed(embed)
-        self._parking_status_cache_expires_at = (
+        self._parking_status_cache[level] = self._clone_embed(embed)
+        self._parking_status_cache_expires_at[level] = (
             time.monotonic() + PARKING_STATUS_CACHE_TTL_SECONDS
         )
 
@@ -427,86 +426,58 @@ class Parking(commands.Cog):
         await interaction.delete_original_response()
         return None
 
-    @app_commands.command(
-        name="parking_status", description="View available parking spots"
-    )
-    @app_commands.checks.cooldown(1, 10.0, key=lambda interaction: interaction.user.id)
-    async def parking_status(self, interaction: discord.Interaction):
-        """Summarize resident, guest, and staff parking availability."""
-        cached_embed = self._get_cached_parking_status_embed()
-        if cached_embed is not None:
-            await interaction.response.send_message(embed=cached_embed, ephemeral=True)
-            return
-
-        async with self._parking_status_lock:
-            cached_embed = self._get_cached_parking_status_embed()
-            if cached_embed is not None:
-                await interaction.response.send_message(
-                    embed=cached_embed, ephemeral=True
-                )
-                return
-
-            now = datetime.now(LOCAL_TZ).replace(minute=0, second=0, microsecond=0)
-            resident_cutoff = now + timedelta(days=7)
-            raw_offers, raw_claims, guest_spots = await self.service.get_parking_data(
-                now, resident_cutoff
+    def _build_offers_claims_db(self, raw_offers, raw_claims):
+        """Parse raw offer and claim dictionaries into timezone-aware grouped databases."""
+        offers_db = {}
+        for row in raw_offers:
+            spot_num = row["spot_number"]
+            offers_db.setdefault(spot_num, []).append(
+                {
+                    "start": datetime.fromisoformat(row["start_time"]).astimezone(
+                        LOCAL_TZ
+                    ),
+                    "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
+                    "owner": row.get("owner_discord_username", "Unknown"),
+                }
             )
 
-            offers_db = {}
-            for row in raw_offers:
-                spot_num = row["spot_number"]
-                offers_db.setdefault(spot_num, []).append(
-                    {
-                        "start": datetime.fromisoformat(row["start_time"]).astimezone(
-                            LOCAL_TZ
-                        ),
-                        "end": datetime.fromisoformat(row["end_time"]).astimezone(
-                            LOCAL_TZ
-                        ),
-                    }
-                )
+        claims_db = {}
+        for row in raw_claims:
+            spot_num = row["spot_number"]
+            claims_db.setdefault(spot_num, []).append(
+                {
+                    "start": datetime.fromisoformat(row["start_time"]).astimezone(
+                        LOCAL_TZ
+                    ),
+                    "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
+                    "claimer": row.get("claimer_discord_username", "Unknown"),
+                }
+            )
+        return offers_db, claims_db
 
-            claims_db = {}
-            for row in raw_claims:
-                spot_num = row["spot_number"]
-                claims_db.setdefault(spot_num, []).append(
-                    {
-                        "start": datetime.fromisoformat(row["start_time"]).astimezone(
-                            LOCAL_TZ
-                        ),
-                        "end": datetime.fromisoformat(row["end_time"]).astimezone(
-                            LOCAL_TZ
-                        ),
-                    }
-                )
+    def _format_resident_guest_spots(
+        self, now, resident_cutoff, all_spots, offers_db, claims_db, guest_spots, level
+    ):
+        """Generate the formatted text lines for resident and guest spots."""
+        lines = []
+        for spot_num in all_spots:
+            spot_offers = offers_db.get(spot_num, [])
+            spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
+            is_guest = spot_num in guest_spots
+            is_resident = not (spot_num in STAFF_SPOTS)
 
-            lines = []
-            all_spots = sorted(set(list(offers_db.keys()) + guest_spots))
-            for spot_num in all_spots:
-                spot_offers = offers_db.get(spot_num, [])
-                spot_claims = sorted(
-                    claims_db.get(spot_num, []), key=lambda x: x["start"]
-                )
-                is_guest = spot_num in guest_spots
-                is_resident = not (spot_num in STAFF_SPOTS)
+            header, blocks = self.service.get_merged_availability(
+                now, resident_cutoff, spot_offers, spot_claims, is_guest, is_resident
+            )
 
-                header, blocks = self.service.get_merged_availability(
-                    now,
-                    resident_cutoff,
-                    spot_offers,
-                    spot_claims,
-                    is_guest,
-                    is_resident,
-                )
+            if not is_guest and header == "❌ Not Offered":
+                continue
 
-                if not is_guest and header == "❌ Not Offered":
-                    continue
-
+            if level == "default":
                 if blocks is None:
                     lines.append(f"**Spot {spot_num}**: {header}")
                     continue
 
-                # Filter out the currently active block so it doesn't duplicate the header
                 future_blocks = [
                     block for block in blocks if not (block[0] <= now < block[1])
                 ]
@@ -521,25 +492,64 @@ class Parking(commands.Cog):
                         ]
                     )
                     lines.append(f"**Spot {spot_num}**: {header}\n{detail}")
+            else:
+                spot_label = (
+                    f"**Spot {spot_num} (Guest)**"
+                    if is_guest
+                    else f"**Spot {spot_num}**"
+                )
+                lines.append(spot_label)
 
-            staff_cutoff = self.service.get_staff_cutoff(now)
-            staff_lines = []
-            staff_offers = self.service.get_staff_availability_windows(
-                now, staff_cutoff
+                future_blocks = [b for b in (blocks or []) if b[1] > now]
+                if future_blocks:
+                    lines.append("  🟢 **Available:**")
+                    for b in future_blocks:
+                        block_start = max(b[0], now)
+                        block_end = b[1]
+                        offered_by = "Guest Spot"
+                        if not is_guest:
+                            for o in spot_offers:
+                                if o["start"] <= block_start < o["end"]:
+                                    offered_by = f"Offered by {o['owner']}"
+                                    break
+                        time_str = f"{block_start.strftime('%a %I%p')} - {block_end.strftime('%a %I%p')}"
+                        lines.append(f"    - {time_str} ({offered_by})")
+                else:
+                    lines.append("  🔴 **No Availability**")
+
+                future_claims = [c for c in spot_claims if c["end"] > now]
+                if future_claims:
+                    lines.append("  🔒 **Reserved:**")
+                    for c in future_claims:
+                        claim_start = max(c["start"], now)
+                        claim_end = c["end"]
+                        time_str = f"{claim_start.strftime('%a %I%p')} - {claim_end.strftime('%a %I%p')}"
+                        lines.append(f"    - {time_str} (Claimed by {c['claimer']})")
+                lines.append("")
+        return lines
+
+    def _format_staff_spots(self, now, effective_staff_cutoff, claims_db, level):
+        """Generate the formatted text lines for staff spots."""
+        staff_lines = []
+        staff_offers = self.service.get_staff_availability_windows(
+            now, effective_staff_cutoff
+        )
+
+        for i, spot_num in enumerate(STAFF_SPOTS):
+            spot_claims = sorted(claims_db.get(spot_num, []), key=lambda x: x["start"])
+            header, blocks = self.service.get_merged_availability(
+                now,
+                effective_staff_cutoff,
+                staff_offers,
+                spot_claims,
+                is_resident=False,
             )
-            for i, spot_num in enumerate(STAFF_SPOTS):
-                spot_claims = sorted(
-                    claims_db.get(spot_num, []), key=lambda x: x["start"]
-                )
-                header, blocks = self.service.get_merged_availability(
-                    now, staff_cutoff, staff_offers, spot_claims, is_resident=False
-                )
 
+            if level == "default":
                 if not blocks:
                     staff_lines.append(f"**Spot {i + 1}**: {header}")
                     continue
 
-                # Filter out the currently active block for staff as well
                 future_blocks = [
                     block for block in blocks if not (block[0] <= now < block[1])
                 ]
@@ -554,28 +564,124 @@ class Parking(commands.Cog):
                         ]
                     )
                     staff_lines.append(f"**Spot {i + 1}**: {header}\n{detail}")
+            else:
+                staff_lines.append(f"**Spot {i + 1} (Staff)**")
+                future_blocks = [b for b in (blocks or []) if b[1] > now]
+                if future_blocks:
+                    staff_lines.append("  🟢 **Available:**")
+                    for b in future_blocks:
+                        block_start = max(b[0], now)
+                        block_end = b[1]
+                        time_str = f"{block_start.strftime('%a %I%p')} - {block_end.strftime('%a %I%p')}"
+                        staff_lines.append(f"    - {time_str} (Staff Spot)")
+                else:
+                    staff_lines.append("  🔴 **No Availability**")
+
+                future_claims = [c for c in spot_claims if c["end"] > now]
+                if future_claims:
+                    staff_lines.append("  🔒 **Reserved:**")
+                    for c in future_claims:
+                        claim_start = max(c["start"], now)
+                        claim_end = c["end"]
+                        time_str = f"{claim_start.strftime('%a %I%p')} - {claim_end.strftime('%a %I%p')}"
+                        staff_lines.append(
+                            f"    - {time_str} (Claimed by {c['claimer']})"
+                        )
+                staff_lines.append("")
+        return staff_lines
+
+    @app_commands.command(
+        name="parking_status", description="View available parking spots"
+    )
+    @app_commands.choices(
+        detail_level=[
+            app_commands.Choice(name="Default", value="default"),
+            app_commands.Choice(name="High", value="high"),
+        ]
+    )
+    @app_commands.checks.cooldown(1, 10.0, key=lambda interaction: interaction.user.id)
+    async def parking_status(
+        self,
+        interaction: discord.Interaction,
+        detail_level: app_commands.Choice[str] = None,
+    ):
+        """Summarize resident, guest, and staff parking availability."""
+        level = detail_level.value if detail_level else "default"
+
+        cached_embed = self._get_cached_parking_status_embed(level)
+        if cached_embed is not None:
+            await interaction.response.send_message(embed=cached_embed, ephemeral=True)
+            return
+
+        async with self._parking_status_lock:
+            # Double-check cache inside the lock to handle race conditions
+            cached_embed = self._get_cached_parking_status_embed(level)
+            if cached_embed is not None:
+                await interaction.response.send_message(
+                    embed=cached_embed, ephemeral=True
+                )
+                return
+
+            now = datetime.now(LOCAL_TZ).replace(minute=0, second=0, microsecond=0)
+            resident_cutoff = now + timedelta(days=7)
+
+            raw_offers, raw_claims, guest_spots = await self.service.get_parking_data(
+                now, resident_cutoff
+            )
+
+            offers_db, claims_db = self._build_offers_claims_db(raw_offers, raw_claims)
+            all_spots = sorted(set(list(offers_db.keys()) + guest_spots))
+
+            lines = self._format_resident_guest_spots(
+                now,
+                resident_cutoff,
+                all_spots,
+                offers_db,
+                claims_db,
+                guest_spots,
+                level,
+            )
+
+            effective_staff_cutoff = (
+                resident_cutoff
+                if level == "high"
+                else self.service.get_staff_cutoff(now)
+            )
+            staff_lines = self._format_staff_spots(
+                now, effective_staff_cutoff, claims_db, level
+            )
 
             embed = discord.Embed(
                 title="Parking Status",
                 color=discord.Color.blue(),
                 timestamp=datetime.now(LOCAL_TZ),
             )
-            res_value = "\n".join(lines) if lines else "No spots currently offered."
+
+            res_value = (
+                "\n".join(lines).strip() if lines else "No spots currently offered."
+            )
             if len(res_value) > DISCORD_EMBED_FIELD_VALUE_LIMIT:
                 res_value = res_value[:TRUNCATION_LIMIT] + TRUNCATION_SUFFIX
 
-            staff_value = "\n".join(staff_lines)
+            staff_value = "\n".join(staff_lines).strip()
+            if not staff_value:
+                staff_value = "No staff spots available."
             if len(staff_value) > DISCORD_EMBED_FIELD_VALUE_LIMIT:
                 staff_value = staff_value[:TRUNCATION_LIMIT] + TRUNCATION_SUFFIX
 
             embed.add_field(
                 name="Resident/Guest Spots (Next 7 Days)", value=res_value, inline=False
             )
+
+            staff_title_suffix = "(Next 7 Days)" if level == "high" else "(Today)"
             embed.add_field(
-                name="Staff Parking (Today)", value=staff_value, inline=False
+                name=f"Staff Parking {staff_title_suffix}",
+                value=staff_value,
+                inline=False,
             )
             embed.set_footer(text=f"{BOT_NAME} Parking System - Chicago Time")
-            self._store_cached_parking_status_embed(embed)
+
+            self._store_cached_parking_status_embed(embed, level)
 
         await interaction.response.send_message(
             embed=self._clone_embed(embed), ephemeral=True

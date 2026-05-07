@@ -256,6 +256,7 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
                         "spot_number": 10,
                         "start_time": "2026-04-06T08:00:00-05:00",
                         "end_time": "2026-04-06T18:00:00-05:00",
+                        "owner_discord_username": "Owner1",
                     }
                 ],
                 [
@@ -263,6 +264,7 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
                         "spot_number": 998,
                         "start_time": "2026-04-06T10:00:00-05:00",
                         "end_time": "2026-04-06T12:00:00-05:00",
+                        "claimer_discord_username": "Claimer1",
                     }
                 ],
                 [46],
@@ -302,7 +304,10 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
                 ),
             ]
 
-            await parking_module.Parking.parking_status.callback(self.cog, interaction)
+            # UPDATE: Pass None for detail_level
+            await parking_module.Parking.parking_status.callback(
+                self.cog, interaction, None
+            )
 
         embed = interaction.response.send_message.await_args.kwargs["embed"]
         self.assertIsInstance(embed, discord.Embed)
@@ -334,7 +339,10 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
             self.service.get_staff_availability_windows.return_value = []
             self.service.get_merged_availability.return_value = ("❌ Fully Booked", [])
 
-            await parking_module.Parking.parking_status.callback(self.cog, interaction)
+            # UPDATE: Pass None for detail_level
+            await parking_module.Parking.parking_status.callback(
+                self.cog, interaction, None
+            )
 
         embed = interaction.response.send_message.await_args.kwargs["embed"]
 
@@ -357,6 +365,7 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
                         "spot_number": 10,
                         "start_time": "2026-04-06T08:00:00-05:00",
                         "end_time": "2026-04-06T18:00:00-05:00",
+                        "owner_discord_username": "Owner1",
                     }
                 ],
                 [],
@@ -364,7 +373,10 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
             )
             self.service.get_merged_availability.return_value = ("❌ Not Offered", [])
 
-            await parking_module.Parking.parking_status.callback(self.cog, interaction)
+            # UPDATE: Pass None for detail_level
+            await parking_module.Parking.parking_status.callback(
+                self.cog, interaction, None
+            )
 
         embed = interaction.response.send_message.await_args.kwargs["embed"]
 
@@ -462,6 +474,85 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("**All resident spots are: 1-33, 41-46**", embed.fields[1].value)
         self.assertNotIn("Resident Spots (1-33, 41-45)", embed.fields[1].value)
         self.assertNotIn("Leave [spot] blank", embed.fields[0].value)
+
+    def test_build_offers_claims_db_parses_data(self):
+        raw_offers = [
+            {
+                "spot_number": 5,
+                "start_time": "2026-05-07T15:00:00+00:00",
+                "end_time": "2026-05-07T17:00:00+00:00",
+                "owner_discord_username": "JohnDoe",
+            }
+        ]
+        raw_claims = [
+            {
+                "spot_number": 5,
+                "start_time": "2026-05-07T15:30:00+00:00",
+                "end_time": "2026-05-07T16:30:00+00:00",
+                "claimer_discord_username": "JaneSmith",
+            }
+        ]
+
+        offers_db, claims_db = self.cog._build_offers_claims_db(raw_offers, raw_claims)
+
+        self.assertIn(5, offers_db)
+        self.assertEqual(offers_db[5][0]["owner"], "JohnDoe")
+        self.assertIn(5, claims_db)
+        self.assertEqual(claims_db[5][0]["claimer"], "JaneSmith")
+
+    def test_format_resident_guest_spots_high_detail(self):
+        now = datetime(2026, 5, 7, 12, 0, 0, tzinfo=parking_module.LOCAL_TZ)
+        resident_cutoff = now + timedelta(days=7)
+
+        block_start = now + timedelta(hours=1)
+        block_end = now + timedelta(hours=5)
+        claim_start = now + timedelta(hours=6)
+        claim_end = now + timedelta(hours=8)
+
+        self.service.get_merged_availability.return_value = (
+            "🟢 Available",
+            [(block_start, block_end)],
+        )
+
+        offers_db = {5: [{"start": block_start, "end": block_end, "owner": "JohnDoe"}]}
+        claims_db = {
+            5: [{"start": claim_start, "end": claim_end, "claimer": "JaneSmith"}]
+        }
+
+        lines = self.cog._format_resident_guest_spots(
+            now, resident_cutoff, [5], offers_db, claims_db, [], level="high"
+        )
+
+        result_text = "\n".join(lines)
+        self.assertIn("**Spot 5**", result_text)
+        self.assertIn("🟢 **Available:**", result_text)
+        self.assertIn("Offered by JohnDoe", result_text)
+        self.assertIn("🔒 **Reserved:**", result_text)
+        self.assertIn("Claimed by JaneSmith", result_text)
+
+    def test_format_staff_spots_high_detail(self):
+        now = datetime(2026, 5, 7, 12, 0, 0, tzinfo=parking_module.LOCAL_TZ)
+        effective_staff_cutoff = now + timedelta(days=7)
+
+        block_start = now + timedelta(hours=2)
+        block_end = now + timedelta(hours=4)
+
+        self.service.get_staff_availability_windows.return_value = [
+            {"start": block_start, "end": block_end}
+        ]
+        self.service.get_merged_availability.return_value = (
+            "🟢 Available",
+            [(block_start, block_end)],
+        )
+
+        lines = self.cog._format_staff_spots(
+            now, effective_staff_cutoff, {}, level="high"
+        )
+
+        result_text = "\n".join(lines)
+        self.assertIn("**Spot 1 (Staff)**", result_text)
+        self.assertIn("🟢 **Available:**", result_text)
+        self.assertIn("(Staff Spot)", result_text)
 
 
 class ParkingServiceTests(unittest.TestCase):
