@@ -514,9 +514,26 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
             [(block_start, block_end)],
         )
 
-        offers_db = {5: [{"start": block_start, "end": block_end, "owner": "JohnDoe"}]}
+        # UPDATE 1: Add the owner_id and claimer_id keys
+        offers_db = {
+            5: [
+                {
+                    "start": block_start,
+                    "end": block_end,
+                    "owner": "JohnDoe",
+                    "owner_id": "1111",
+                }
+            ]
+        }
         claims_db = {
-            5: [{"start": claim_start, "end": claim_end, "claimer": "JaneSmith"}]
+            5: [
+                {
+                    "start": claim_start,
+                    "end": claim_end,
+                    "claimer": "JaneSmith",
+                    "claimer_id": "2222",
+                }
+            ]
         }
 
         lines = self.cog._format_resident_guest_spots(
@@ -525,10 +542,12 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
 
         result_text = "\n".join(lines)
         self.assertIn("**Spot 5**", result_text)
-        self.assertIn("🟢 **Available:**", result_text)
-        self.assertIn("Offered by JohnDoe", result_text)
-        self.assertIn("🔒 **Reserved:**", result_text)
-        self.assertIn("Claimed by JaneSmith", result_text)
+        self.assertIn("**🟢 Available:**", result_text)
+
+        # UPDATE 2: Assert against the new mention format instead of plain text
+        self.assertIn("Offered by <@1111>", result_text)
+        self.assertIn("**🔒 Reserved:**", result_text)
+        self.assertIn("Claimed by <@2222>", result_text)
 
     def test_format_staff_spots_high_detail(self):
         now = datetime(2026, 5, 7, 12, 0, 0, tzinfo=parking_module.LOCAL_TZ)
