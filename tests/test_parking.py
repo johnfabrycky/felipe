@@ -406,7 +406,7 @@ class ParkingCogTests(unittest.IsolatedAsyncioTestCase):
         )
 
         # 4. Verify the new logic works
-        self.assertIsNone(blocks)
+        self.assertEqual(len(blocks), 1)
         self.assertEqual(header, "🟢 Available Now (All Week)")
 
     async def test_cancel_rejects_manual_text(self):

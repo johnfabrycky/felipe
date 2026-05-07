@@ -472,7 +472,7 @@ class Parking(commands.Cog):
                 continue
 
             if level == "default":
-                if blocks is None:
+                if not blocks or len(blocks) == 1:
                     lines.append(f"**Spot {spot_num}**: {header}")
                     continue
 
