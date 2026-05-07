@@ -5,6 +5,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from bot.config import MY_GUILD
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,6 +98,17 @@ class General(commands.Cog):
         await ctx.send(
             "👻 Ghost commands cleared! The duplicate should vanish shortly."
         )
+
+    @commands.command()
+    @commands.is_owner()  # Ensures only you can run this
+    async def sync(self, ctx):
+        """Manually syncs slash commands."""
+        try:
+            self.bot.tree.copy_global_to(guild=MY_GUILD)
+            synced = await self.bot.tree.sync(guild=MY_GUILD)
+            await ctx.send(f"Synced {len(synced)} command(s) to the guild.")
+        except Exception as e:
+            await ctx.send(f"Failed to sync commands: {e}")
 
 
 async def setup(bot: commands.Bot):
