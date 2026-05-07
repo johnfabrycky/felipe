@@ -54,10 +54,6 @@ class Bot(commands.Bot):
             except Exception as e:
                 print(f"Failed to load {extension}: {e}")
 
-        # Sync slash commands to the development guild. This is fast and safe.
-        self.tree.copy_global_to(guild=MY_GUILD)
-        await self.tree.sync(guild=MY_GUILD)
-        print(f"Tree synced to guild {GUILD_ID}")
 
     async def on_ready(self):
         """Cache startup data, initialize parking, and publish bot presence."""
