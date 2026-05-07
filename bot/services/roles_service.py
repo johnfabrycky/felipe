@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+
 class RolesService:
     """Business logic and data access for role selection and directory updates."""
 
@@ -13,7 +14,12 @@ class RolesService:
     async def get_last_update(self, discord_id: int) -> str | None:
         """Fetches the ISO string of the user's last role update."""
         try:
-            res = await self.supabase.table("residents").select("last_role_update").eq("discord_id", str(discord_id)).execute()
+            res = (
+                await self.supabase.table("residents")
+                .select("last_role_update")
+                .eq("discord_id", str(discord_id))
+                .execute()
+            )
             if res.data and res.data[0].get("last_role_update"):
                 return res.data[0]["last_role_update"]
             return None
@@ -33,7 +39,7 @@ class RolesService:
             "discord_id": str(discord_id),
             "username": username,
             "community_role": role_slug,
-            "last_role_update": datetime.now(timezone.utc).isoformat()
+            "last_role_update": datetime.now(timezone.utc).isoformat(),
         }
 
         # Only attach email to payload if it exists, so we don't accidentally overwrite

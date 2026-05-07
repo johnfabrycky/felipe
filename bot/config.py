@@ -21,7 +21,7 @@ EXTENSIONS = [
     "bot.cogs.general",
     "bot.cogs.feedback",
     "bot.cogs.roles",
-    #"bot.cogs.gemini_chat",
+    # "bot.cogs.gemini_chat",
 ]
 LOCAL_TZ = pytz.timezone("America/Chicago")
 
