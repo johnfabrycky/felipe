@@ -660,7 +660,7 @@ class ParkingService:
         else:
             header = "❌ Not Offered"
 
-        return header, (None if len(blocks) < 2 else blocks)
+        return header, blocks
 
     def get_staff_cutoff(self, now: datetime) -> datetime:
         """Calculate the actual cutoff datetime for the current staff parking window."""
