@@ -433,11 +433,10 @@ class Parking(commands.Cog):
             spot_num = row["spot_number"]
             offers_db.setdefault(spot_num, []).append(
                 {
-                    "start": datetime.fromisoformat(row["start_time"]).astimezone(
-                        LOCAL_TZ
-                    ),
+                    "start": datetime.fromisoformat(row["start_time"]).astimezone(LOCAL_TZ),
                     "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
                     "owner": row.get("owner_discord_username", "Unknown"),
+                    "owner_id": row.get("owner_id"), # NEW: Capture the ID
                 }
             )
 
@@ -446,11 +445,10 @@ class Parking(commands.Cog):
             spot_num = row["spot_number"]
             claims_db.setdefault(spot_num, []).append(
                 {
-                    "start": datetime.fromisoformat(row["start_time"]).astimezone(
-                        LOCAL_TZ
-                    ),
+                    "start": datetime.fromisoformat(row["start_time"]).astimezone(LOCAL_TZ),
                     "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
                     "claimer": row.get("claimer_discord_username", "Unknown"),
+                    "claimer_id": row.get("claimer_id"), # NEW: Capture the ID
                 }
             )
         return offers_db, claims_db
@@ -502,7 +500,8 @@ class Parking(commands.Cog):
 
                 future_blocks = [b for b in (blocks or []) if b[1] > now]
                 if future_blocks:
-                    lines.append("  🟢 **Available:**")
+                    # Removed leading spaces
+                    lines.append("**🟢 Available:**")
                     for b in future_blocks:
                         block_start = max(b[0], now)
                         block_end = b[1]
@@ -510,21 +509,26 @@ class Parking(commands.Cog):
                         if not is_guest:
                             for o in spot_offers:
                                 if o["start"] <= block_start < o["end"]:
-                                    offered_by = f"Offered by {o['owner']}"
+                                    # USE THE DISCORD MENTION FORMAT
+                                    offered_by = f"Offered by <@{o['owner_id']}>"
                                     break
                         time_str = f"{block_start.strftime('%a %I%p')} - {block_end.strftime('%a %I%p')}"
-                        lines.append(f"    - {time_str} ({offered_by})")
+                        # Removed leading spaces
+                        lines.append(f"- {time_str} ({offered_by})")
                 else:
-                    lines.append("  🔴 **No Availability**")
+                    # Removed leading spaces
+                    lines.append("**🔴 No Availability**")
 
                 future_claims = [c for c in spot_claims if c["end"] > now]
                 if future_claims:
-                    lines.append("  🔒 **Reserved:**")
+                    # Removed leading spaces
+                    lines.append("**🔒 Reserved:**")
                     for c in future_claims:
                         claim_start = max(c["start"], now)
                         claim_end = c["end"]
                         time_str = f"{claim_start.strftime('%a %I%p')} - {claim_end.strftime('%a %I%p')}"
-                        lines.append(f"    - {time_str} (Claimed by {c['claimer']})")
+                        # Removed leading spaces
+                        lines.append(f"- {time_str} (Claimed by <@{c['claimer_id']}>)")
                 lines.append("")
         return lines
 
@@ -568,25 +572,27 @@ class Parking(commands.Cog):
                 staff_lines.append(f"**Spot {i + 1} (Staff)**")
                 future_blocks = [b for b in (blocks or []) if b[1] > now]
                 if future_blocks:
-                    staff_lines.append("  🟢 **Available:**")
+                    # Removed leading spaces
+                    staff_lines.append("🟢 **Available:**")
                     for b in future_blocks:
                         block_start = max(b[0], now)
                         block_end = b[1]
                         time_str = f"{block_start.strftime('%a %I%p')} - {block_end.strftime('%a %I%p')}"
-                        staff_lines.append(f"    - {time_str} (Staff Spot)")
+                        # Removed leading spaces
+                        staff_lines.append(f"- {time_str} (Staff Spot)")
                 else:
-                    staff_lines.append("  🔴 **No Availability**")
+                    # Removed leading spaces
+                    staff_lines.append("**🔴 No Availability**")
 
                 future_claims = [c for c in spot_claims if c["end"] > now]
                 if future_claims:
-                    staff_lines.append("  🔒 **Reserved:**")
+                    # Removed leading spaces
+                    staff_lines.append("**🔒 Reserved:**")
                     for c in future_claims:
                         claim_start = max(c["start"], now)
                         claim_end = c["end"]
                         time_str = f"{claim_start.strftime('%a %I%p')} - {claim_end.strftime('%a %I%p')}"
-                        staff_lines.append(
-                            f"    - {time_str} (Claimed by {c['claimer']})"
-                        )
+                        staff_lines.append(f"- {time_str} (Claimed by <@{c['claimer_id']}>)")
                 staff_lines.append("")
         return staff_lines
 
