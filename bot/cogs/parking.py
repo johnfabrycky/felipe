@@ -554,7 +554,7 @@ class Parking(commands.Cog):
             )
 
             if level == "default":
-                if not blocks:
+                if not blocks or len(blocks) == 1:
                     staff_lines.append(f"**Spot {i + 1}**: {header}")
                     continue
 
