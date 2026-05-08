@@ -433,10 +433,12 @@ class Parking(commands.Cog):
             spot_num = row["spot_number"]
             offers_db.setdefault(spot_num, []).append(
                 {
-                    "start": datetime.fromisoformat(row["start_time"]).astimezone(LOCAL_TZ),
+                    "start": datetime.fromisoformat(row["start_time"]).astimezone(
+                        LOCAL_TZ
+                    ),
                     "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
                     "owner": row.get("owner_discord_username", "Unknown"),
-                    "owner_id": row.get("owner_id"), # NEW: Capture the ID
+                    "owner_id": row.get("owner_id"),  # NEW: Capture the ID
                 }
             )
 
@@ -445,10 +447,12 @@ class Parking(commands.Cog):
             spot_num = row["spot_number"]
             claims_db.setdefault(spot_num, []).append(
                 {
-                    "start": datetime.fromisoformat(row["start_time"]).astimezone(LOCAL_TZ),
+                    "start": datetime.fromisoformat(row["start_time"]).astimezone(
+                        LOCAL_TZ
+                    ),
                     "end": datetime.fromisoformat(row["end_time"]).astimezone(LOCAL_TZ),
                     "claimer": row.get("claimer_discord_username", "Unknown"),
-                    "claimer_id": row.get("claimer_id"), # NEW: Capture the ID
+                    "claimer_id": row.get("claimer_id"),  # NEW: Capture the ID
                 }
             )
         return offers_db, claims_db
@@ -592,7 +596,9 @@ class Parking(commands.Cog):
                         claim_start = max(c["start"], now)
                         claim_end = c["end"]
                         time_str = f"{claim_start.strftime('%a %I%p')} - {claim_end.strftime('%a %I%p')}"
-                        staff_lines.append(f"- {time_str} (Claimed by <@{c['claimer_id']}>)")
+                        staff_lines.append(
+                            f"- {time_str} (Claimed by <@{c['claimer_id']}>)"
+                        )
                 staff_lines.append("")
         return staff_lines
 

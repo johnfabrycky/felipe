@@ -12,6 +12,9 @@ from supabase import AsyncClient, create_async_client
 from bot.config import EXTENSIONS, GUILD_ID, MY_GUILD
 from bot.utils.database import ensure_tables_exist
 from bot.utils.discord_http_logging import install_discord_http_rate_limit_logging
+from discord.ext import tasks
+import requests
+import aiohttp
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -54,6 +57,36 @@ class Bot(commands.Bot):
             except Exception as e:
                 print(f"Failed to load {extension}: {e}")
 
+        self.heartbeat_monitor.start()
+
+    @tasks.loop(minutes=3.0)
+    async def heartbeat_monitor(self):
+        try:
+            # 1. Check if the bot's internal websocket is closed
+            if self.is_closed():
+                print("Bot connection is closed. Skipping heartbeat.")
+                return
+
+            # 2. (Optional) Check latency to ensure it's not severely lagging
+            if self.latency > 1.0:  # Latency is over 1000ms
+                print(f"High gateway latency ({self.latency}s). Skipping heartbeat.")
+                return
+
+            # 3. If everything is healthy, ping the healthcheck URL
+            ping_url = os.getenv("HEALTHCHECK_DISCORD_URL")
+            if ping_url:
+                async with aiohttp.ClientSession() as session:
+                    await session.get(ping_url)
+
+                print("Heartbeat sent successfully.")
+        except Exception:
+            logger.exception("Discord Gateway health check failed")
+            return None
+
+    @heartbeat_monitor.before_loop
+    async def before_heartbeat(self):
+        # Wait until the bot is fully logged in before starting the loop
+        await self.wait_until_ready()
 
     async def on_ready(self):
         """Cache startup data, initialize parking, and publish bot presence."""
