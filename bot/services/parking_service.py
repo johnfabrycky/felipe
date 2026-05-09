@@ -678,4 +678,6 @@ class ParkingService:
             )
 
         # Otherwise (Sun-Thu), the window ends at midnight of the next day.
-        return (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        return (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )

@@ -79,9 +79,11 @@ class Bot(commands.Bot):
                 return
 
             # NEW: Check for recent HTTP rate limiting
-            if self.last_rate_limit_timestamp and (
-                time.monotonic() - self.last_rate_limit_timestamp
-            ) < self.RATE_LIMIT_UNHEALTHY_SECONDS:
+            if (
+                self.last_rate_limit_timestamp
+                and (time.monotonic() - self.last_rate_limit_timestamp)
+                < self.RATE_LIMIT_UNHEALTHY_SECONDS
+            ):
                 print(
                     f"Bot was rate-limited within the last {self.RATE_LIMIT_UNHEALTHY_SECONDS / 60:.0f} "
                     f"minutes. Skipping healthy heartbeat."
