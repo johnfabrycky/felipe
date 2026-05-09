@@ -12,14 +12,13 @@ from supabase import AsyncClient, create_async_client
 
 from bot.config import EXTENSIONS, GUILD_ID, MY_GUILD
 from bot.utils.database import ensure_tables_exist
-from bot.utils.discord_http_logging import install_discord_http_rate_limit_logging
+from bot.utils.http_monitoring import install_http_monitoring_hook
 from discord.ext import tasks
 import requests
 import aiohttp
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-install_discord_http_rate_limit_logging()
 
 
 class Bot(commands.Bot):
@@ -41,6 +40,9 @@ class Bot(commands.Bot):
 
     async def setup_hook(self):
         """Load configured extensions and sync slash commands to the development guild."""
+        install_http_monitoring_hook(self)
+        print("Installed proactive rate limit monitor.")
+
         db_url = os.environ.get("SUPABASE_DB_URL")
         if db_url:
             print("Verifying database schema...")
@@ -61,6 +63,7 @@ class Bot(commands.Bot):
                 print(f"Failed to load {extension}: {e}")
 
         self.heartbeat_monitor.start()
+        self.api_health_prober.start()
 
     @tasks.loop(minutes=3.0)
     async def heartbeat_monitor(self):
@@ -99,6 +102,33 @@ class Bot(commands.Bot):
     @heartbeat_monitor.before_loop
     async def before_heartbeat(self):
         # Wait until the bot is fully logged in before starting the loop
+        await self.wait_until_ready()
+
+    @tasks.loop(minutes=5.0)
+    async def api_health_prober(self):
+        """Periodically make a benign API call to proactively check for rate-limiting."""
+        try:
+            if self.is_closed():
+                # Don't run if the bot is disconnected.
+                return
+
+            # A lightweight, read-only request that has no side-effects.
+            # Fetching the bot's own user object is a safe and reliable check.
+            await self.fetch_user(self.user.id)
+            print("API health probe successful.")
+        except discord.HTTPException as e:
+            # The RateLimitMonitorHandler will have already caught a 429.
+            # This log is for other potential HTTP issues during the probe.
+            if e.status != 429:
+                logger.warning(
+                    "API health probe failed with non-429 HTTP error.",
+                    extra={"status": e.status, "code": e.code},
+                )
+        except Exception:
+            logger.exception("Unhandled error in API health prober task.")
+
+    @api_health_prober.before_loop
+    async def before_api_health_prober(self):
         await self.wait_until_ready()
 
     async def on_ready(self):
@@ -160,7 +190,6 @@ async def on_app_command_error(
         isinstance(original := getattr(error, "original", error), discord.HTTPException)
         and original.status == 429
     ):
-        bot.last_rate_limit_timestamp = time.monotonic()
         logger.warning(
             "Discord rate limited app command response",
             extra={
