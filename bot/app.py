@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 
 import discord
 from discord import app_commands
@@ -35,6 +36,8 @@ class Bot(commands.Bot):
         self.supabase: AsyncClient | None = None
         self.meal_cache = []
         self._ready_once = False
+        self.last_rate_limit_timestamp: float | None = None
+        self.RATE_LIMIT_UNHEALTHY_SECONDS = 300  # 5 minutes
 
     async def setup_hook(self):
         """Load configured extensions and sync slash commands to the development guild."""
@@ -70,6 +73,16 @@ class Bot(commands.Bot):
             # 2. (Optional) Check latency to ensure it's not severely lagging
             if self.latency > 1.0:  # Latency is over 1000ms
                 print(f"High gateway latency ({self.latency}s). Skipping heartbeat.")
+                return
+
+            # NEW: Check for recent HTTP rate limiting
+            if self.last_rate_limit_timestamp and (
+                time.monotonic() - self.last_rate_limit_timestamp
+            ) < self.RATE_LIMIT_UNHEALTHY_SECONDS:
+                print(
+                    f"Bot was rate-limited within the last {self.RATE_LIMIT_UNHEALTHY_SECONDS / 60:.0f} "
+                    f"minutes. Skipping healthy heartbeat."
+                )
                 return
 
             # 3. If everything is healthy, ping the healthcheck URL
@@ -147,6 +160,7 @@ async def on_app_command_error(
         isinstance(original := getattr(error, "original", error), discord.HTTPException)
         and original.status == 429
     ):
+        bot.last_rate_limit_timestamp = time.monotonic()
         logger.warning(
             "Discord rate limited app command response",
             extra={
